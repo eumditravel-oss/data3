@@ -260,7 +260,7 @@ function renderView() {
   $("table-body").innerHTML = bodyHtml;
 }
 
-/* ★ 엑셀 내보내기 (100% 동일 양식 및 색상 적용) ★ */
+/* ★ 엑셀 내보내기 (argb 오타 수정 완료) ★ */
 $("btn-excel").onclick = async () => {
   if (!state.ready) return alert("먼저 분석을 완료해주세요.");
   if (typeof ExcelJS === 'undefined') return alert("ExcelJS 라이브러리를 불러오지 못했습니다.");
@@ -270,25 +270,20 @@ $("btn-excel").onclick = async () => {
 
   const floors = state.floors.sort(floorSorter);
   const endCol = 4 + floors.length + 1; // "합계" 컬럼
-  const maxCol = endCol + 1;            // "비고" 컬럼 (마지막)
+  const maxCol = endCol + 1;            // "비고" 컬럼
 
-  // 1. 열 너비 지정
   const cols = [{ width: 10 }, { width: 15 }, { width: 18 }, { width: 10 }];
   floors.forEach(() => cols.push({ width: 9 }));
-  cols.push({ width: 13 }); // 합계
-  cols.push({ width: 12 }); // 비고
+  cols.push({ width: 13 }); 
+  cols.push({ width: 12 });
   ws.columns = cols;
 
-  // 2. 타이틀 (1~2행 통합 병합)
   const r1 = ws.addRow(["QS 분석용 프로젝트 통합 템플릿"]); r1.height = 25;
-  const r2 = ws.addRow([]); r2.height = 18;
-  
-  ws.mergeCells(1, 1, 2, maxCol); // ★ 1~2행 전체(비고열까지) 병합
+  ws.mergeCells(1, 1, 2, maxCol); // 1~2행 병합
   const titleCell = ws.getCell(1, 1);
   titleCell.font = { size: 16, bold: true, name: '맑은 고딕' };
-  titleCell.alignment = { vertical: 'middle', horizontal: 'center' }; // 중앙 정렬
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
-  // 3. 헤더
   const r3Data = ["동", "아이템", "구분", "단위", "현재 프로젝트 수량"];
   for(let i=0; i<floors.length-1; i++) r3Data.push(""); 
   r3Data.push("합계", "비고");
@@ -309,17 +304,16 @@ $("btn-excel").onclick = async () => {
   for(let r=3; r<=4; r++) {
     for(let c=1; c<=maxCol; c++) {
       const cell = ws.getCell(r, c);
-      // ★ 헤더 배경색 (R:31 G:78 B:120) & 흰색 폰트
-      cell.font = { bold: true, size: 10, name: '맑은 고딕', color: { arg: 'FFFFFFFF' } };
+      // [수정] argb 사용, (R:31 G:78 B:120 -> 1F4E78)
+      cell.font = { bold: true, size: 10, name: '맑은 고딕', color: { argb: 'FFFFFFFF' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: 'FF1F4E78' } }; 
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }; 
       cell.border = borderAll;
     }
   }
 
   const dataBorder = { top:{style:'thin', color:{argb:'FFBFBFBF'}}, left:{style:'thin', color:{argb:'FFBFBFBF'}}, bottom:{style:'thin', color:{argb:'FFBFBFBF'}}, right:{style:'thin', color:{argb:'FFBFBFBF'}} };
 
-  // 4. 데이터 렌더링
   state.dongs.sort().forEach(dong => {
     const dongData = state.data[dong] || {};
     const grouped = {};
@@ -349,7 +343,7 @@ $("btn-excel").onclick = async () => {
         let rowTotal = 0;
         floors.forEach(f => { rowData.push(item.floors[f] || 0); catSum[f] += (item.floors[f] || 0); rowTotal += (item.floors[f] || 0); });
         rowData.push(rowTotal); 
-        rowData.push(""); // 비고
+        rowData.push(""); 
 
         const row = ws.addRow(rowData);
         row.height = 18; row.outlineLevel = 1; totalSum += rowTotal;
@@ -357,7 +351,8 @@ $("btn-excel").onclick = async () => {
         for(let c=1; c<=maxCol; c++) {
           const cell = row.getCell(c);
           cell.border = dataBorder; cell.font = { name: '맑은 고딕', size: 10 };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: rowFill } };
+          // [수정] argb 사용
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowFill } };
           if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
         }
@@ -373,7 +368,8 @@ $("btn-excel").onclick = async () => {
       for(let c=1; c<=maxCol; c++) {
         const cell = sumRow.getCell(c);
         cell.font = { name: '맑은 고딕', size: 10, bold: true };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: 'FFF2F2F2' } }; 
+        // [수정] argb 사용
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; 
         cell.border = dataBorder;
         if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
         else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
@@ -397,9 +393,9 @@ $("btn-excel").onclick = async () => {
         
         for(let c=1; c<=maxCol; c++) {
           const cell = ratioRow.getCell(c);
-          // ★ 지표 행 색상 (R:150 G:54 B:52) & 흰색 폰트
-          cell.font = { name: '맑은 고딕', size: 10, bold: true, color: { arg: 'FFFFFFFF' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: 'FF963634' } };
+          // [수정] argb 사용, (R:150 G:54 B:52 -> 963634)
+          cell.font = { name: '맑은 고딕', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF963634' } };
           cell.border = dataBorder;
           if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.0000'; }
