@@ -35,19 +35,19 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: "Prete
 .col-edit { width: 250px; }
 .col-cat { width: 180px; }
 
-/* --- [수정된 부분] 엑셀 테이블 틀고정 설정 --- */
+/* 엑셀 테이블 틀고정 */
 .excel-view-container { overflow: auto; margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; max-height: 600px; }
 .excel-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; min-width: 1000px; }
-
-/* 1. th 개별 고정이 아닌 thead 전체 그룹 고정으로 변경 */
 .excel-table thead { position: sticky; top: 0; z-index: 10; box-shadow: 0 1px 0 var(--line); }
-
 .excel-table th, .excel-table td { border: 0.5px solid var(--line); padding: 12px 10px; text-align: center; white-space: nowrap; }
-
-/* 2. th에서 position: sticky 속성 제거, background-clip 추가로 스크롤 시 깨짐 방지 */
 .excel-table th { background: #f4f7fd; font-weight: 800; color: #445571; background-clip: padding-box; }
-
 .excel-table tr:hover td { background: #f9fbff; }
+
+/* 면적 입력 인풋 스타일 (사용성 최적화) */
+.area-input { width: 100%; box-sizing: border-box; border: none; background: transparent; text-align: right; font-size: 14px; font-weight: bold; outline: none; padding: 5px; color: var(--primary); }
+.area-input:focus { background: #fffde7; outline: 2px solid var(--orange); border-radius: 4px; }
+.area-input::placeholder { color: #ccc; font-weight: normal; }
+
 .row-subtotal { background: #f1f3f5; font-weight: 800; }
 .row-ratio { background: #fff4e6 !important; font-weight: 800; color: var(--orange); }
 .col-total { background: #f8f9fa; font-weight: 800; color: var(--primary); }
