@@ -93,14 +93,18 @@ function buildMapping() {
   state.mappings = state.rawItems.map((item, idx) => ({ id: idx, original: item, canonical: item, category: predictCategory(item) }));
 }
 
+/* ★ 2번 탭 행 색상 클래스 추가 (cat-콘크리트 등) ★ */
 function renderMapping() {
-  $("mapping-list").innerHTML = state.mappings.map(m => `
-    <div class="item-row">
+  $("mapping-list").innerHTML = state.mappings.map(m => {
+    const catClass = m.category === '잡/기타' ? 'etc' : m.category;
+    return `
+    <div class="item-row cat-${catClass}">
       <div class="col-num">${m.id + 1}</div>
       <div class="col-orig">${m.original}</div>
       <div class="col-edit"><input class="input" value="${m.canonical}" oninput="updateMapping(${m.id},'canonical',this.value)"/></div>
       <div class="col-cat"><select class="input" onchange="updateMapping(${m.id},'category',this.value)">${CATEGORIES.map(c=>`<option value="${c}" ${m.category===c?'selected':''}>${c}</option>`).join("")}</select></div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 window.updateMapping = (id, f, v) => { state.mappings[id][f] = v; if (f === 'category') renderMapping(); };
 
@@ -218,6 +222,7 @@ function renderView() {
     let catSum = 0;
     const catClass = cat === '잡/기타' ? 'etc' : cat;
 
+    // ★ 3번 탭 행 색상 클래스 추가 (row-cat-콘크리트 등) ★
     items.forEach(name => {
       const item = grouped[name];
       const total = floors.reduce((s,f)=>s+item.floors[f],0);
@@ -238,7 +243,6 @@ function renderView() {
         totalNum += nVal; totalDiv += dVal;
         html += `<td>${dVal > 0 ? (nVal/dVal).toFixed(4) : '-'}</td>`;
       });
-      // 웹 UI 합계(전체비율) 칸 표시
       html += `<td class="col-total">${totalDiv > 0 ? (totalNum/totalDiv).toFixed(4) : '-'}</td></tr>`;
       return html;
     };
@@ -258,25 +262,23 @@ function renderView() {
   $("table-body").innerHTML = bodyHtml;
 }
 
-/* ★ 엑셀 내보내기 완벽 템플릿 구현 ★ */
 $("btn-excel").onclick = async () => {
   if (!state.ready) return alert("먼저 분석을 완료해주세요.");
-  
+  if (typeof ExcelJS === 'undefined') return alert("ExcelJS 라이브러리를 불러오지 못했습니다.");
+
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('비교양식', { views: [{ state: 'frozen', ySplit: 4, xSplit: 4 }] });
 
   const floors = state.floors.sort(floorSorter);
-  const endCol = 4 + floors.length + 1; // "합계" 컬럼
-  const maxCol = endCol + 1;            // "비고" 컬럼 (마지막)
+  const endCol = 4 + floors.length + 1; 
+  const maxCol = endCol + 1;
 
-  // 1. 열 너비 지정
   const cols = [{ width: 10 }, { width: 15 }, { width: 18 }, { width: 10 }];
   floors.forEach(() => cols.push({ width: 9 }));
-  cols.push({ width: 13 }); // 합계
-  cols.push({ width: 12 }); // 비고
+  cols.push({ width: 13 }); 
+  cols.push({ width: 12 });
   ws.columns = cols;
 
-  // 2. 타이틀 및 기준
   const r1 = ws.addRow(["QS 분석용 프로젝트 통합 템플릿"]); r1.height = 25;
   ws.mergeCells(1, 1, 1, maxCol);
   r1.getCell(1).font = { size: 12, bold: true, name: '맑은 고딕' };
@@ -288,10 +290,9 @@ $("btn-excel").onclick = async () => {
   r2.getCell(maxCol).alignment = { vertical: 'middle', horizontal: 'right' };
   ws.mergeCells(2, 5, 2, maxCol);
 
-  // 3. 헤더
   const r3Data = ["동", "아이템", "구분", "단위", "현재 프로젝트 수량"];
-  for(let i=0; i<floors.length-1; i++) r3Data.push(""); // 빈 공간 확보
-  r3Data.push("합계", "비고"); // 합계와 비고가 제자리에 병합되도록 배열 끝에 Push
+  for(let i=0; i<floors.length-1; i++) r3Data.push(""); 
+  r3Data.push("합계", "비고");
   
   const r4Data = ["", "", "", ""];
   floors.forEach(f => r4Data.push(f));
@@ -301,9 +302,9 @@ $("btn-excel").onclick = async () => {
   const r4 = ws.addRow(r4Data); r4.height = 22;
 
   ws.mergeCells(3, 1, 4, 1); ws.mergeCells(3, 2, 4, 2); ws.mergeCells(3, 3, 4, 3); ws.mergeCells(3, 4, 4, 4);
-  ws.mergeCells(3, 5, 3, endCol - 1); // 현재 프로젝트
-  ws.mergeCells(3, endCol, 4, endCol); // 합계
-  ws.mergeCells(3, maxCol, 4, maxCol); // 비고
+  ws.mergeCells(3, 5, 3, endCol - 1); 
+  ws.mergeCells(3, endCol, 4, endCol); 
+  ws.mergeCells(3, maxCol, 4, maxCol); 
 
   const borderAll = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
   for(let r=3; r<=4; r++) {
@@ -318,7 +319,6 @@ $("btn-excel").onclick = async () => {
 
   const dataBorder = { top:{style:'thin', color:{argb:'FFBFBFBF'}}, left:{style:'thin', color:{argb:'FFBFBFBF'}}, bottom:{style:'thin', color:{argb:'FFBFBFBF'}}, right:{style:'thin', color:{argb:'FFBFBFBF'}} };
 
-  // 4. 데이터 렌더링
   state.dongs.sort().forEach(dong => {
     const dongData = state.data[dong] || {};
     const grouped = {};
@@ -342,14 +342,13 @@ $("btn-excel").onclick = async () => {
       const catSum = {}; floors.forEach(f => catSum[f] = 0);
       let totalSum = 0;
 
-      // 일반 아이템 행 (그룹화 레벨 1)
       items.forEach(name => {
         const item = grouped[name];
         const rowData = [dong, cat==='콘크리트'?'레미콘':cat, name, cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')];
         let rowTotal = 0;
         floors.forEach(f => { rowData.push(item.floors[f] || 0); catSum[f] += (item.floors[f] || 0); rowTotal += (item.floors[f] || 0); });
-        rowData.push(rowTotal); // 합계칸
-        rowData.push(""); // 비고칸
+        rowData.push(rowTotal);
+        rowData.push(""); 
 
         const row = ws.addRow(rowData);
         row.height = 18; row.outlineLevel = 1; totalSum += rowTotal;
@@ -363,11 +362,10 @@ $("btn-excel").onclick = async () => {
         }
       });
 
-      // 합계 소계 행 (그룹화 레벨 0)
       const sumRowData = [dong, cat==='콘크리트'?'레미콘':cat, "합계", cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')];
       floors.forEach(f => sumRowData.push(catSum[f])); 
-      sumRowData.push(totalSum); // 전체합계
-      sumRowData.push(""); // 비고
+      sumRowData.push(totalSum); 
+      sumRowData.push(""); 
       
       const sumRow = ws.addRow(sumRowData); 
       sumRow.height = 18; sumRow.outlineLevel = 0; 
@@ -380,7 +378,6 @@ $("btn-excel").onclick = async () => {
         else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
       }
 
-      // 지표 계산 공통 함수 (전체 합계 비율 포함 및 비고 테두리 보장)
       const renderExcelRatio = (title, unit, numFn, divFn) => {
         const ratioRowData = [dong, "지표", title, unit];
         let totalNum = 0, totalDiv = 0;
@@ -391,8 +388,8 @@ $("btn-excel").onclick = async () => {
           ratioRowData.push(dVal > 0 ? (nVal / dVal) : 0);
         });
         
-        ratioRowData.push(totalDiv > 0 ? (totalNum / totalDiv) : 0); // 전체 합계 비율 계산 (파란색 요청)
-        ratioRowData.push(""); // 비고칸 
+        ratioRowData.push(totalDiv > 0 ? (totalNum / totalDiv) : 0); 
+        ratioRowData.push(""); 
         
         const ratioRow = ws.addRow(ratioRowData);
         ratioRow.height = 18;
