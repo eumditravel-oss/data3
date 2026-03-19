@@ -94,22 +94,29 @@ function buildMapping() {
 }
 
 function renderMapping() {
-  $("mapping-list").innerHTML = state.mappings.map(m => `
-    <div class="item-row">
+  $("mapping-list").innerHTML = state.mappings.map(m => {
+    const catClass = m.category === '잡/기타' ? 'etc' : m.category;
+    return `
+    <div class="item-row cat-${catClass}">
       <div class="col-num">${m.id + 1}</div>
       <div class="col-orig">${m.original}</div>
       <div class="col-edit"><input class="input" value="${m.canonical}" oninput="updateMapping(${m.id},'canonical',this.value)"/></div>
       <div class="col-cat"><select class="input" onchange="updateMapping(${m.id},'category',this.value)">${CATEGORIES.map(c=>`<option value="${c}" ${m.category===c?'selected':''}>${c}</option>`).join("")}</select></div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
-window.updateMapping = (id, f, v) => state.mappings[id][f] = v;
+
+window.updateMapping = (id, f, v) => {
+  state.mappings[id][f] = v;
+  // 중분류(카테고리)가 변경되면 즉시 행 색상을 업데이트하기 위해 재렌더링
+  if (f === 'category') renderMapping(); 
+};
 
 $("btn-apply").onclick = () => {
   renderAreaUI();
   switchTab('area');
 };
 
-/* 면적 입력 UI 렌더링 */
 function renderAreaUI() {
   const dongs = state.dongs.sort();
   const floors = state.floors.sort(floorSorter);
@@ -145,21 +152,15 @@ window.handleAreaNav = (e, r, c, maxR, maxC) => {
   if (input) { input.focus(); input.select(); }
 };
 
-/* ★ 1. 면적 양식 엑셀 내보내기 ★ */
 $("btn-download-area").onclick = () => {
   const dongs = state.dongs.sort();
   const floors = state.floors.sort(floorSorter);
   const aoa = [];
   
-  // 헤더 작성
   aoa.push(["층 명칭", ...dongs]);
-  
-  // 데이터 작성
   floors.forEach(f => {
     const row = [f];
-    dongs.forEach(d => {
-      row.push(state.areas[d]?.[f] || ""); // 값이 없으면 빈칸
-    });
+    dongs.forEach(d => row.push(state.areas[d]?.[f] || ""));
     aoa.push(row);
   });
 
@@ -169,7 +170,6 @@ $("btn-download-area").onclick = () => {
   XLSX.writeFile(wb, "QS_면적입력양식.xlsx");
 };
 
-/* ★ 2. 면적 양식 엑셀 불러오기 ★ */
 $("file-upload-area").onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -179,12 +179,9 @@ $("file-upload-area").onchange = async (e) => {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
   
-  if (data.length < 2) {
-    alert("유효한 면적 데이터 양식이 아닙니다.");
-    return;
-  }
+  if (data.length < 2) return alert("유효한 면적 데이터 양식이 아닙니다.");
   
-  const headers = data[0]; // ["층 명칭", "101동", "102동", ...]
+  const headers = data[0]; 
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -194,18 +191,15 @@ $("file-upload-area").onchange = async (e) => {
     for (let c = 1; c < headers.length; c++) {
       const dong = String(headers[c]).trim();
       const val = parseFloat(row[c]);
-      
-      // 유효한 동/층/숫자일 경우 데이터에 덮어씌움
       if (!isNaN(val) && state.dongs.includes(dong) && state.floors.includes(floor)) {
         if (!state.areas[dong]) state.areas[dong] = {};
         state.areas[dong][floor] = val;
       }
     }
   }
-  
-  renderAreaUI(); // 화면 갱신
+  renderAreaUI();
   alert("면적 데이터가 성공적으로 불러와졌습니다!");
-  e.target.value = ""; // 파일 인풋 초기화 (같은 파일 다시 선택 시 대응)
+  e.target.value = ""; 
 };
 
 $("btn-calc-area").onclick = () => {
@@ -290,7 +284,6 @@ function renderView() {
   $("table-body").innerHTML = bodyHtml;
 }
 
-/* 엑셀 내보내기 (템플릿 복제) */
 $("btn-excel").onclick = async () => {
   if (!state.ready) return alert("먼저 분석을 완료해주세요.");
   
@@ -387,7 +380,6 @@ $("btn-excel").onclick = async () => {
         else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
       });
 
-      // 지표 추가 블록 재활용
       const renderExcelRatio = (title, unit, divFn) => {
         const ratioRowData = [dong, title, "지표", unit];
         floors.forEach(f => {
