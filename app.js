@@ -104,13 +104,11 @@ function renderMapping() {
 }
 window.updateMapping = (id, f, v) => state.mappings[id][f] = v;
 
-/* 2번 -> 2-1번 면적 탭으로 이동 */
 $("btn-apply").onclick = () => {
   renderAreaUI();
   switchTab('area');
 };
 
-/* 면적 입력 테이블 렌더링 */
 function renderAreaUI() {
   const dongs = state.dongs.sort();
   const floors = state.floors.sort(floorSorter);
@@ -130,13 +128,11 @@ function renderAreaUI() {
   $("area-body").innerHTML = body;
 }
 
-/* 면적 데이터 저장 */
 window.updateArea = (dong, floor, val) => {
   if (!state.areas[dong]) state.areas[dong] = {};
   state.areas[dong][floor] = parseFloat(val) || 0;
 };
 
-/* 면적 테이블 엑셀형 키보드 네비게이션 */
 window.handleAreaNav = (e, r, c, maxR, maxC) => {
   let nr = r, nc = c;
   if (e.key === 'ArrowUp') nr = Math.max(0, r - 1);
@@ -144,12 +140,10 @@ window.handleAreaNav = (e, r, c, maxR, maxC) => {
   else if (e.key === 'ArrowLeft') nc = Math.max(0, c - 1);
   else if (e.key === 'ArrowRight') nc = Math.min(maxC - 1, c + 1);
   else return;
-
   const input = document.querySelector(`.area-input[data-r="${nr}"][data-c="${nc}"]`);
   if (input) { input.focus(); input.select(); }
 };
 
-/* 2-1번 -> 3번 결과 탭으로 이동 */
 $("btn-calc-area").onclick = () => {
   state.ready = true;
   $("filter-dong").innerHTML = state.dongs.sort().map(d => `<option value="${d}">${d}</option>`).join("");
@@ -182,11 +176,14 @@ function renderView() {
     if (items.length === 0) return;
     
     let catSum = 0;
+    // 카테고리별 클래스 할당
+    const catClass = cat === '잡/기타' ? 'etc' : cat;
+
     items.forEach(name => {
       const item = grouped[name];
       const total = floors.reduce((s,f)=>s+item.floors[f],0);
       catSum += total;
-      bodyHtml += `<tr><td>${dong}</td><td>${cat==='콘크리트'?'레미콘':cat}</td><td>${name}</td><td>${cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')}</td>${floors.map(f=>`<td>${item.floors[f].toLocaleString(undefined,{maximumFractionDigits:3})}</td>`).join("")}<td class="col-total">${total.toLocaleString(undefined,{maximumFractionDigits:3})}</td></tr>`;
+      bodyHtml += `<tr class="row-cat-${catClass}"><td>${dong}</td><td>${cat==='콘크리트'?'레미콘':cat}</td><td>${name}</td><td>${cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')}</td>${floors.map(f=>`<td>${item.floors[f].toLocaleString(undefined,{maximumFractionDigits:3})}</td>`).join("")}<td class="col-total">${total.toLocaleString(undefined,{maximumFractionDigits:3})}</td></tr>`;
     });
 
     bodyHtml += `<tr class="row-subtotal"><td colspan="3" style="text-align:right">합계</td><td>${cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')}</td>${floors.map(f => {
@@ -194,7 +191,7 @@ function renderView() {
       return `<td>${s.toLocaleString(undefined,{maximumFractionDigits:3})}</td>`;
     }).join("")}<td class="col-total">${catSum.toLocaleString(undefined,{maximumFractionDigits:3})}</td></tr>`;
 
-    // ★ 3대 지표 행 추가
+    // 1) 철근 3대 지표
     if(cat === '철근') {
       const renderRatioRow = (title, unit, divFn) => {
         let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right">${title}</td><td>${unit}</td>`;
@@ -211,11 +208,28 @@ function renderView() {
       bodyHtml += renderRatioRow("지표 (톤당 면적)", "Ton/m²", (f) => state.areas[dong]?.[f] || 0);
       bodyHtml += renderRatioRow("지표 (톤당 평수)", "Ton/Py", (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
     }
+
+    // 2) 거푸집 2대 지표 (신규 추가)
+    if(cat === '거푸집') {
+      const renderFormRatioRow = (title, unit, divFn) => {
+        let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right">${title}</td><td>${unit}</td>`;
+        floors.forEach(f => {
+          const fSum = Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
+          const divisor = divFn(f);
+          html += `<td>${divisor > 0 ? (fSum/divisor).toFixed(4) : '-'}</td>`;
+        });
+        html += `<td>-</td></tr>`;
+        return html;
+      };
+      
+      bodyHtml += renderFormRatioRow("지표 (거푸집면적/m²)", "m²/m²", (f) => state.areas[dong]?.[f] || 0);
+      bodyHtml += renderFormRatioRow("지표 (거푸집면적/Py)", "m²/Py", (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+    }
   });
   $("table-body").innerHTML = bodyHtml;
 }
 
-/* 엑셀 내보내기 */
+/* 엑셀 다운로드 */
 $("btn-excel").onclick = async () => {
   if (!state.ready) return alert("먼저 분석을 완료해주세요.");
   
@@ -276,6 +290,12 @@ $("btn-excel").onclick = async () => {
       const items = Object.keys(grouped).filter(n => grouped[n].category === cat).sort();
       if (items.length === 0) return;
 
+      // 엑셀 중분류별 배경색 설정
+      let rowFill = 'FFFFFFFF';
+      if (cat === '콘크리트') rowFill = 'FFEEF4FF'; // 파란색계열
+      else if (cat === '철근') rowFill = 'FFF0FCF4'; // 초록색계열
+      else if (cat === '거푸집') rowFill = 'FFFFF9EC'; // 주황색계열
+
       const catSum = {}; floors.forEach(f => catSum[f] = 0);
       let totalSum = 0;
 
@@ -290,6 +310,7 @@ $("btn-excel").onclick = async () => {
         row.height = 18; row.outlineLevel = 1; totalSum += rowTotal;
         row.eachCell((cell, colNum) => {
           cell.border = dataBorder; cell.font = { name: '맑은 고딕', size: 10 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: rowFill } };
           if (colNum <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
         });
@@ -306,7 +327,7 @@ $("btn-excel").onclick = async () => {
         else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
       });
 
-      // ★ 3대 지표 삽입
+      // 철근 지표 3종 추가
       if (cat === '철근') {
         const ratios = [
           { t: "레미콘/철근", l: "Ton/m³", div: (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0) },
@@ -321,7 +342,35 @@ $("btn-excel").onclick = async () => {
             const dVal = div(f);
             ratioRowData.push(dVal > 0 ? (rSum / dVal) : 0);
           });
-          ratioRowData.push(""); // 합계 비움
+          ratioRowData.push(""); 
+          
+          const ratioRow = ws.addRow(ratioRowData);
+          ratioRow.height = 18;
+          ratioRow.eachCell((cell, colNum) => {
+            cell.font = { name: '맑은 고딕', size: 10, bold: true, color: { arg: 'FFC00000' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: 'FFFFE699' } };
+            cell.border = dataBorder;
+            if (colNum <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.0000'; }
+          });
+        });
+      }
+
+      // 거푸집 지표 2종 추가
+      if (cat === '거푸집') {
+        const fRatios = [
+          { t: "면적/거푸집", l: "m²/m²", div: (f) => state.areas[dong]?.[f] || 0 },
+          { t: "평수/거푸집", l: "m²/Py", div: (f) => (state.areas[dong]?.[f] || 0) * 0.3025 }
+        ];
+
+        fRatios.forEach(({t, l, div}) => {
+          const ratioRowData = [dong, t, "지표", l];
+          floors.forEach(f => {
+            const fSum = Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
+            const dVal = div(f);
+            ratioRowData.push(dVal > 0 ? (fSum / dVal) : 0);
+          });
+          ratioRowData.push(""); 
           
           const ratioRow = ws.addRow(ratioRowData);
           ratioRow.height = 18;
