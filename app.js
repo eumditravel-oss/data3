@@ -94,23 +94,15 @@ function buildMapping() {
 }
 
 function renderMapping() {
-  $("mapping-list").innerHTML = state.mappings.map(m => {
-    const catClass = m.category === '잡/기타' ? 'etc' : m.category;
-    return `
-    <div class="item-row cat-${catClass}">
+  $("mapping-list").innerHTML = state.mappings.map(m => `
+    <div class="item-row">
       <div class="col-num">${m.id + 1}</div>
       <div class="col-orig">${m.original}</div>
       <div class="col-edit"><input class="input" value="${m.canonical}" oninput="updateMapping(${m.id},'canonical',this.value)"/></div>
       <div class="col-cat"><select class="input" onchange="updateMapping(${m.id},'category',this.value)">${CATEGORIES.map(c=>`<option value="${c}" ${m.category===c?'selected':''}>${c}</option>`).join("")}</select></div>
-    </div>`;
-  }).join("");
+    </div>`).join("");
 }
-
-window.updateMapping = (id, f, v) => {
-  state.mappings[id][f] = v;
-  // 중분류(카테고리)가 변경되면 즉시 행 색상을 업데이트하기 위해 재렌더링
-  if (f === 'category') renderMapping(); 
-};
+window.updateMapping = (id, f, v) => { state.mappings[id][f] = v; if (f === 'category') renderMapping(); };
 
 $("btn-apply").onclick = () => {
   renderAreaUI();
@@ -155,15 +147,12 @@ window.handleAreaNav = (e, r, c, maxR, maxC) => {
 $("btn-download-area").onclick = () => {
   const dongs = state.dongs.sort();
   const floors = state.floors.sort(floorSorter);
-  const aoa = [];
-  
-  aoa.push(["층 명칭", ...dongs]);
+  const aoa = [["층 명칭", ...dongs]];
   floors.forEach(f => {
     const row = [f];
     dongs.forEach(d => row.push(state.areas[d]?.[f] || ""));
     aoa.push(row);
   });
-
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "면적데이터");
@@ -173,24 +162,18 @@ $("btn-download-area").onclick = () => {
 $("file-upload-area").onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  
   const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  const data = XLSX.utils.sheet_to_json(XLSX.read(buffer, { type: 'array' }).Sheets[XLSX.read(buffer, { type: 'array' }).SheetNames[0]], { header: 1, defval: "" });
   
   if (data.length < 2) return alert("유효한 면적 데이터 양식이 아닙니다.");
-  
   const headers = data[0]; 
   
   for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const floor = String(row[0]).trim();
+    const floor = String(data[i][0]).trim();
     if (!floor) continue;
-    
     for (let c = 1; c < headers.length; c++) {
       const dong = String(headers[c]).trim();
-      const val = parseFloat(row[c]);
+      const val = parseFloat(data[i][c]);
       if (!isNaN(val) && state.dongs.includes(dong) && state.floors.includes(floor)) {
         if (!state.areas[dong]) state.areas[dong] = {};
         state.areas[dong][floor] = val;
@@ -205,8 +188,7 @@ $("file-upload-area").onchange = async (e) => {
 $("btn-calc-area").onclick = () => {
   state.ready = true;
   $("filter-dong").innerHTML = state.dongs.sort().map(d => `<option value="${d}">${d}</option>`).join("");
-  renderView(); 
-  switchTab('view');
+  renderView(); switchTab('view');
 };
 
 $("filter-dong").onchange = renderView;
@@ -248,42 +230,35 @@ function renderView() {
       return `<td>${s.toLocaleString(undefined,{maximumFractionDigits:3})}</td>`;
     }).join("")}<td class="col-total">${catSum.toLocaleString(undefined,{maximumFractionDigits:3})}</td></tr>`;
 
-    if(cat === '철근') {
-      const renderRatioRow = (title, unit, divFn) => {
-        let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right">${title}</td><td>${unit}</td>`;
-        floors.forEach(f => {
-          const rSum = Object.keys(grouped).filter(n=>grouped[n].category==='철근').reduce((s,n)=>s+grouped[n].floors[f],0);
-          const divisor = divFn(f);
-          html += `<td>${divisor > 0 ? (rSum/divisor).toFixed(4) : '-'}</td>`;
-        });
-        html += `<td>-</td></tr>`;
-        return html;
-      };
-      
-      bodyHtml += renderRatioRow("지표 (톤당 루베)", "Ton/m³", (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0));
-      bodyHtml += renderRatioRow("지표 (톤당 면적)", "Ton/m²", (f) => state.areas[dong]?.[f] || 0);
-      bodyHtml += renderRatioRow("지표 (톤당 평수)", "Ton/Py", (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
-    }
+    const renderRatioRow = (title, unit, numFn, divFn) => {
+      let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right">${title}</td><td>${unit}</td>`;
+      let totalNum = 0, totalDiv = 0;
+      floors.forEach(f => {
+        const nVal = numFn(f); const dVal = divFn(f);
+        totalNum += nVal; totalDiv += dVal;
+        html += `<td>${dVal > 0 ? (nVal/dVal).toFixed(4) : '-'}</td>`;
+      });
+      // 웹 UI 합계(전체비율) 칸 표시
+      html += `<td class="col-total">${totalDiv > 0 ? (totalNum/totalDiv).toFixed(4) : '-'}</td></tr>`;
+      return html;
+    };
 
+    if(cat === '철근') {
+      const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='철근').reduce((s,n)=>s+grouped[n].floors[f],0);
+      bodyHtml += renderRatioRow("지표 (톤당 루베)", "Ton/m³", numFn, (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0));
+      bodyHtml += renderRatioRow("지표 (톤당 면적)", "Ton/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
+      bodyHtml += renderRatioRow("지표 (톤당 평수)", "Ton/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+    }
     if(cat === '거푸집') {
-      const renderFormRatioRow = (title, unit, divFn) => {
-        let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right">${title}</td><td>${unit}</td>`;
-        floors.forEach(f => {
-          const fSum = Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
-          const divisor = divFn(f);
-          html += `<td>${divisor > 0 ? (fSum/divisor).toFixed(4) : '-'}</td>`;
-        });
-        html += `<td>-</td></tr>`;
-        return html;
-      };
-      
-      bodyHtml += renderFormRatioRow("지표 (거푸집/면적)", "m²/m²", (f) => state.areas[dong]?.[f] || 0);
-      bodyHtml += renderFormRatioRow("지표 (거푸집/평수)", "m²/Py", (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+      const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
+      bodyHtml += renderRatioRow("지표 (거푸집/면적)", "m²/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
+      bodyHtml += renderRatioRow("지표 (거푸집/평수)", "m²/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
     }
   });
   $("table-body").innerHTML = bodyHtml;
 }
 
+/* ★ 엑셀 내보내기 완벽 템플릿 구현 ★ */
 $("btn-excel").onclick = async () => {
   if (!state.ready) return alert("먼저 분석을 완료해주세요.");
   
@@ -291,34 +266,48 @@ $("btn-excel").onclick = async () => {
   const ws = wb.addWorksheet('비교양식', { views: [{ state: 'frozen', ySplit: 4, xSplit: 4 }] });
 
   const floors = state.floors.sort(floorSorter);
-  const endCol = 4 + floors.length + 1;
+  const endCol = 4 + floors.length + 1; // "합계" 컬럼
+  const maxCol = endCol + 1;            // "비고" 컬럼 (마지막)
 
+  // 1. 열 너비 지정
   const cols = [{ width: 10 }, { width: 15 }, { width: 18 }, { width: 10 }];
   floors.forEach(() => cols.push({ width: 9 }));
-  cols.push({ width: 13 }); cols.push({ width: 12 });
+  cols.push({ width: 13 }); // 합계
+  cols.push({ width: 12 }); // 비고
   ws.columns = cols;
 
-  const r1 = ws.addRow(["QS 분석용 프로젝트 비교 템플릿"]); r1.height = 25;
-  ws.mergeCells(1, 1, 1, endCol + 1);
+  // 2. 타이틀 및 기준
+  const r1 = ws.addRow(["QS 분석용 프로젝트 통합 템플릿"]); r1.height = 25;
+  ws.mergeCells(1, 1, 1, maxCol);
   r1.getCell(1).font = { size: 12, bold: true, name: '맑은 고딕' };
   r1.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
 
   const r2 = ws.addRow([]); r2.height = 18;
-  r2.getCell(endCol + 1).value = "할증 후 수량 기준";
-  r2.getCell(endCol + 1).font = { size: 10, name: '맑은 고딕' };
-  r2.getCell(endCol + 1).alignment = { vertical: 'middle', horizontal: 'right' };
-  ws.mergeCells(2, 5, 2, endCol + 1);
+  r2.getCell(maxCol).value = "할증 후 수량 기준";
+  r2.getCell(maxCol).font = { size: 10, name: '맑은 고딕' };
+  r2.getCell(maxCol).alignment = { vertical: 'middle', horizontal: 'right' };
+  ws.mergeCells(2, 5, 2, maxCol);
 
-  const r3 = ws.addRow(["동", "아이템", "구분", "단위", "현재 프로젝트"]);
-  const r4 = ws.addRow(["", "", "", "", ...floors, "합계", "비고"]);
-  r3.height = 22; r4.height = 22;
+  // 3. 헤더
+  const r3Data = ["동", "아이템", "구분", "단위", "현재 프로젝트 수량"];
+  for(let i=0; i<floors.length-1; i++) r3Data.push(""); // 빈 공간 확보
+  r3Data.push("합계", "비고"); // 합계와 비고가 제자리에 병합되도록 배열 끝에 Push
+  
+  const r4Data = ["", "", "", ""];
+  floors.forEach(f => r4Data.push(f));
+  r4Data.push("", "");
+
+  const r3 = ws.addRow(r3Data); r3.height = 22;
+  const r4 = ws.addRow(r4Data); r4.height = 22;
 
   ws.mergeCells(3, 1, 4, 1); ws.mergeCells(3, 2, 4, 2); ws.mergeCells(3, 3, 4, 3); ws.mergeCells(3, 4, 4, 4);
-  ws.mergeCells(3, 5, 3, endCol - 1); ws.mergeCells(3, endCol, 4, endCol); ws.mergeCells(3, endCol + 1, 4, endCol + 1);
+  ws.mergeCells(3, 5, 3, endCol - 1); // 현재 프로젝트
+  ws.mergeCells(3, endCol, 4, endCol); // 합계
+  ws.mergeCells(3, maxCol, 4, maxCol); // 비고
 
   const borderAll = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} };
   for(let r=3; r<=4; r++) {
-    for(let c=1; c<=endCol + 1; c++) {
+    for(let c=1; c<=maxCol; c++) {
       const cell = ws.getCell(r, c);
       cell.font = { bold: true, size: 10, name: '맑은 고딕' };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -329,6 +318,7 @@ $("btn-excel").onclick = async () => {
 
   const dataBorder = { top:{style:'thin', color:{argb:'FFBFBFBF'}}, left:{style:'thin', color:{argb:'FFBFBFBF'}}, bottom:{style:'thin', color:{argb:'FFBFBFBF'}}, right:{style:'thin', color:{argb:'FFBFBFBF'}} };
 
+  // 4. 데이터 렌더링
   state.dongs.sort().forEach(dong => {
     const dongData = state.data[dong] || {};
     const grouped = {};
@@ -352,63 +342,82 @@ $("btn-excel").onclick = async () => {
       const catSum = {}; floors.forEach(f => catSum[f] = 0);
       let totalSum = 0;
 
+      // 일반 아이템 행 (그룹화 레벨 1)
       items.forEach(name => {
         const item = grouped[name];
         const rowData = [dong, cat==='콘크리트'?'레미콘':cat, name, cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')];
         let rowTotal = 0;
         floors.forEach(f => { rowData.push(item.floors[f] || 0); catSum[f] += (item.floors[f] || 0); rowTotal += (item.floors[f] || 0); });
-        rowData.push(rowTotal);
-        
+        rowData.push(rowTotal); // 합계칸
+        rowData.push(""); // 비고칸
+
         const row = ws.addRow(rowData);
         row.height = 18; row.outlineLevel = 1; totalSum += rowTotal;
-        row.eachCell((cell, colNum) => {
+        
+        for(let c=1; c<=maxCol; c++) {
+          const cell = row.getCell(c);
           cell.border = dataBorder; cell.font = { name: '맑은 고딕', size: 10 };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: rowFill } };
-          if (colNum <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
-        });
+        }
       });
 
+      // 합계 소계 행 (그룹화 레벨 0)
       const sumRowData = [dong, cat==='콘크리트'?'레미콘':cat, "합계", cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')];
-      floors.forEach(f => sumRowData.push(catSum[f])); sumRowData.push(totalSum);
+      floors.forEach(f => sumRowData.push(catSum[f])); 
+      sumRowData.push(totalSum); // 전체합계
+      sumRowData.push(""); // 비고
       
-      const sumRow = ws.addRow(sumRowData); sumRow.height = 18; sumRow.outlineLevel = 0; 
-      sumRow.eachCell((cell, colNum) => {
+      const sumRow = ws.addRow(sumRowData); 
+      sumRow.height = 18; sumRow.outlineLevel = 0; 
+      for(let c=1; c<=maxCol; c++) {
+        const cell = sumRow.getCell(c);
         cell.font = { name: '맑은 고딕', size: 10, bold: true };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: 'FFF2F2F2' } }; cell.border = dataBorder;
-        if (colNum <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: 'FFF2F2F2' } }; 
+        cell.border = dataBorder;
+        if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
         else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
-      });
+      }
 
-      const renderExcelRatio = (title, unit, divFn) => {
-        const ratioRowData = [dong, title, "지표", unit];
+      // 지표 계산 공통 함수 (전체 합계 비율 포함 및 비고 테두리 보장)
+      const renderExcelRatio = (title, unit, numFn, divFn) => {
+        const ratioRowData = [dong, "지표", title, unit];
+        let totalNum = 0, totalDiv = 0;
+        
         floors.forEach(f => {
-          const sumVal = Object.keys(grouped).filter(n=>grouped[n].category===cat).reduce((s,n)=>s+grouped[n].floors[f],0);
-          const divisor = divFn(f);
-          ratioRowData.push(divisor > 0 ? (sumVal / divisor) : 0);
+          const nVal = numFn(f); const dVal = divFn(f);
+          totalNum += nVal; totalDiv += dVal;
+          ratioRowData.push(dVal > 0 ? (nVal / dVal) : 0);
         });
-        ratioRowData.push(""); 
+        
+        ratioRowData.push(totalDiv > 0 ? (totalNum / totalDiv) : 0); // 전체 합계 비율 계산 (파란색 요청)
+        ratioRowData.push(""); // 비고칸 
         
         const ratioRow = ws.addRow(ratioRowData);
         ratioRow.height = 18;
-        ratioRow.eachCell((cell, colNum) => {
+        
+        for(let c=1; c<=maxCol; c++) {
+          const cell = ratioRow.getCell(c);
           cell.font = { name: '맑은 고딕', size: 10, bold: true, color: { arg: 'FFC00000' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { arg: 'FFFFE699' } };
           cell.border = dataBorder;
-          if (colNum <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.0000'; }
-        });
+        }
       };
 
       if (cat === '철근') {
-        renderExcelRatio("레미콘/철근", "Ton/m³", (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0));
-        renderExcelRatio("면적/철근", "Ton/m²", (f) => state.areas[dong]?.[f] || 0);
-        renderExcelRatio("평수/철근", "Ton/Py", (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+        const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='철근').reduce((s,n)=>s+grouped[n].floors[f],0);
+        renderExcelRatio("레미콘/철근", "Ton/m³", numFn, (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0));
+        renderExcelRatio("면적/철근", "Ton/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
+        renderExcelRatio("평수/철근", "Ton/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
       }
       
       if (cat === '거푸집') {
-        renderExcelRatio("면적/거푸집", "m²/m²", (f) => state.areas[dong]?.[f] || 0);
-        renderExcelRatio("평수/거푸집", "m²/Py", (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+        const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
+        renderExcelRatio("면적/거푸집", "m²/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
+        renderExcelRatio("평수/거푸집", "m²/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
       }
     });
 
