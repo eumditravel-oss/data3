@@ -72,9 +72,16 @@
           <div class="toolbar">
             <div class="toolbar__text">
               <h3 style="color:var(--orange);">층별 면적(m²) 입력</h3>
-              <p>각 동/층의 면적을 입력하세요. 평수(Py) 지표는 면적×0.3025로 자동 계산됩니다. <br/><strong style="color:var(--primary);">* 엑셀처럼 키보드 방향키(↑↓←→)와 Enter 키로 자유롭게 이동 가능합니다.</strong></p>
+              <p>각 동/층의 면적을 입력하세요. <br/><strong style="color:var(--primary);">* 엑셀 양식으로 내보내어 정리한 뒤 다시 불러오면 자동으로 값이 채워집니다.</strong></p>
             </div>
-            <button id="btn-calc-area" class="btn btn-primary" style="margin-left:auto; background:var(--orange);">입력 완료 및 수량표 확인</button>
+            <div style="display: flex; gap: 10px; margin-left: auto; align-items: center;">
+              <button id="btn-download-area" class="btn btn-ghost" style="color: #445571; border-color: #d9e1ef;">📥 면적 양식 내보내기</button>
+              <label class="btn btn-ghost" style="cursor: pointer; color: var(--primary); border-color: var(--primary); margin: 0;">
+                📤 면적 양식 불러오기
+                <input type="file" id="file-upload-area" accept=".xlsx, .xls" style="display: none;" />
+              </label>
+              <button id="btn-calc-area" class="btn btn-primary" style="background:var(--orange); margin-left: 10px;">입력 완료 및 수량표 확인</button>
+            </div>
           </div>
           <div class="excel-view-container">
             <table class="excel-table">
@@ -93,7 +100,7 @@
               <label>조회 동 선택:</label>
               <select id="filter-dong" class="input" style="width:220px;"></select>
             </div>
-            <button id="btn-excel" class="btn btn-success" style="margin-left:auto;">엑셀 다운로드</button>
+            <button id="btn-excel" class="btn btn-success" style="margin-left:auto;">템플릿 100% 동일 엑셀 다운로드</button>
           </div>
           <div class="excel-view-container">
             <table id="main-excel-table" class="excel-table">
