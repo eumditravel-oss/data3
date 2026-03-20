@@ -8,6 +8,12 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+// 숫자 포맷팅 및 0값 하이픈(-) 처리 도우미 함수
+const fmt = (val, digits = 3) => {
+  if (val === 0 || !val || isNaN(val)) return '-';
+  return val.toLocaleString(undefined, { maximumFractionDigits: digits });
+};
+
 function floorSorter(a, b) {
   const getRank = (name) => {
     const s = String(name).toUpperCase().trim();
@@ -124,7 +130,7 @@ function renderAreaUI() {
     body += `<tr><td style="font-weight:bold; background:#f4f7fd;">${f}</td>`;
     dongs.forEach((d, cIdx) => {
       const val = state.areas[d]?.[f] || "";
-      body += `<td><input type="number" class="area-input" data-r="${rIdx}" data-c="${cIdx}" value="${val}" oninput="updateArea('${d}','${f}',this.value)" onkeydown="handleAreaNav(event, ${rIdx}, ${cIdx}, ${floors.length}, ${dongs.length})" placeholder="0" /></td>`;
+      body += `<td><input type="number" class="area-input" data-r="${rIdx}" data-c="${cIdx}" value="${val}" oninput="updateArea('${d}','${f}',this.value)" onkeydown="handleAreaNav(event, ${rIdx}, ${cIdx}, ${floors.length}, ${dongs.length})" placeholder="-" /></td>`;
     });
     body += `</tr>`;
   });
@@ -196,7 +202,6 @@ $("btn-calc-area").onclick = () => {
 
 $("filter-dong").onchange = renderView;
 
-/* ★ 웹 화면 렌더링 (지표별 색상 적용) ★ */
 function renderView() {
   if (!state.ready) return;
   const dong = $("filter-dong").value;
@@ -222,19 +227,21 @@ function renderView() {
     let catSum = 0;
     const catClass = cat === '잡/기타' ? 'etc' : cat;
 
+    // 아이템 리스트
     items.forEach(name => {
       const item = grouped[name];
       const total = floors.reduce((s,f)=>s+item.floors[f],0);
       catSum += total;
-      bodyHtml += `<tr class="row-cat-${catClass}"><td>${dong}</td><td>${cat==='콘크리트'?'레미콘':cat}</td><td>${name}</td><td>${cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')}</td>${floors.map(f=>`<td>${item.floors[f].toLocaleString(undefined,{maximumFractionDigits:3})}</td>`).join("")}<td class="col-total">${total.toLocaleString(undefined,{maximumFractionDigits:3})}</td></tr>`;
+      bodyHtml += `<tr class="row-cat-${catClass}"><td>${dong}</td><td>${cat==='콘크리트'?'레미콘':cat}</td><td>${name}</td><td>${cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')}</td>${floors.map(f=>`<td>${fmt(item.floors[f], 3)}</td>`).join("")}<td class="col-total">${fmt(total, 3)}</td></tr>`;
     });
 
+    // 카테고리별 소계
     bodyHtml += `<tr class="row-subtotal"><td colspan="3" style="text-align:right">합계</td><td>${cat==='철근'?'TON':(cat==='콘크리트'?'M3':'M2')}</td>${floors.map(f => {
       const s = items.reduce((sum, n) => sum + grouped[n].floors[f], 0);
-      return `<td>${s.toLocaleString(undefined,{maximumFractionDigits:3})}</td>`;
-    }).join("")}<td class="col-total">${catSum.toLocaleString(undefined,{maximumFractionDigits:3})}</td></tr>`;
+      return `<td>${fmt(s, 3)}</td>`;
+    }).join("")}<td class="col-total">${fmt(catSum, 3)}</td></tr>`;
 
-    // 인라인 스타일로 화면상에 5가지 색상 표현
+    // 지표 계산용 렌더러 (웹)
     const renderRatioRow = (title, unit, numFn, divFn, bg, text) => {
       const style = `background-color:${bg} !important; color:${text} !important; border-color: #ccc;`;
       let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right; ${style}">${title}</td><td style="${style}">${unit}</td>`;
@@ -242,9 +249,11 @@ function renderView() {
       floors.forEach(f => {
         const nVal = numFn(f); const dVal = divFn(f);
         totalNum += nVal; totalDiv += dVal;
-        html += `<td style="${style}">${dVal > 0 ? (nVal/dVal).toFixed(4) : '-'}</td>`;
+        const ratio = dVal > 0 ? (nVal / dVal) : 0;
+        html += `<td style="${style}">${fmt(ratio, 4)}</td>`;
       });
-      html += `<td class="col-total" style="${style}">${totalDiv > 0 ? (totalNum/totalDiv).toFixed(4) : '-'}</td></tr>`;
+      const totRatio = totalDiv > 0 ? (totalNum / totalDiv) : 0;
+      html += `<td class="col-total" style="${style}">${fmt(totRatio, 4)}</td></tr>`;
       return html;
     };
 
@@ -263,13 +272,16 @@ function renderView() {
   $("table-body").innerHTML = bodyHtml;
 }
 
-/* ★ 엑셀 내보내기 (지표 5가지 고유 색상 및 양식 100% 반영) ★ */
+/* ★ 엑셀 내보내기 (0값 숨김 및 양식 완벽 적용) ★ */
 $("btn-excel").onclick = async () => {
   if (!state.ready) return alert("먼저 분석을 완료해주세요.");
   if (typeof ExcelJS === 'undefined') return alert("ExcelJS 라이브러리를 불러오지 못했습니다.");
 
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('비교양식', { views: [{ state: 'frozen', ySplit: 4, xSplit: 4 }] });
+  // ★ showZeros: false 속성 부여 (엑셀 '0 값이 있는 셀에 0 표시' 해제)
+  const ws = wb.addWorksheet('비교양식', { 
+    views: [{ state: 'frozen', ySplit: 4, xSplit: 4, showZeros: false }] 
+  });
 
   const floors = state.floors.sort(floorSorter);
   const endCol = 4 + floors.length + 1; // "합계" 컬럼
@@ -375,7 +387,6 @@ $("btn-excel").onclick = async () => {
         else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
       }
 
-      // ★ 지표 행 색상 동적 처리 함수 ★
       const renderExcelRatio = (title, unit, numFn, divFn, bgColor, fontColor) => {
         const ratioRowData = [dong, "지표", title, unit];
         let totalNum = 0, totalDiv = 0;
@@ -383,7 +394,7 @@ $("btn-excel").onclick = async () => {
         floors.forEach(f => {
           const nVal = numFn(f); const dVal = divFn(f);
           totalNum += nVal; totalDiv += dVal;
-          ratioRowData.push(dVal > 0 ? (nVal / dVal) : 0);
+          ratioRowData.push(dVal > 0 ? (nVal / dVal) : 0); // 0은 옵션에 의해 빈칸처리됨
         });
         
         ratioRowData.push(totalDiv > 0 ? (totalNum / totalDiv) : 0); 
@@ -404,19 +415,14 @@ $("btn-excel").onclick = async () => {
 
       if (cat === '철근') {
         const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='철근').reduce((s,n)=>s+grouped[n].floors[f],0);
-        // 빨간색 바탕, 흰 글씨
         renderExcelRatio("레미콘/철근", "Ton/m³", numFn, (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0), 'FFC00000', 'FFFFFFFF');
-        // 주황색 바탕, 검은 글씨
         renderExcelRatio("면적/철근", "Ton/m²", numFn, (f) => state.areas[dong]?.[f] || 0, 'FFFFC000', 'FF000000');
-        // 노란색 바탕, 검은 글씨
         renderExcelRatio("평수/철근", "Ton/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025, 'FFFFFF00', 'FF000000');
       }
       
       if (cat === '거푸집') {
         const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
-        // 진초록 바탕, 흰 글씨
         renderExcelRatio("거푸집/면적", "m²/m²", numFn, (f) => state.areas[dong]?.[f] || 0, 'FF00B050', 'FFFFFFFF');
-        // 연초록 바탕, 검은 글씨
         renderExcelRatio("거푸집/평수", "m²/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025, 'FF92D050', 'FF000000');
       }
     });
