@@ -196,6 +196,7 @@ $("btn-calc-area").onclick = () => {
 
 $("filter-dong").onchange = renderView;
 
+/* ★ 웹 화면 렌더링 (지표별 색상 적용) ★ */
 function renderView() {
   if (!state.ready) return;
   const dong = $("filter-dong").value;
@@ -233,34 +234,36 @@ function renderView() {
       return `<td>${s.toLocaleString(undefined,{maximumFractionDigits:3})}</td>`;
     }).join("")}<td class="col-total">${catSum.toLocaleString(undefined,{maximumFractionDigits:3})}</td></tr>`;
 
-    const renderRatioRow = (title, unit, numFn, divFn) => {
-      let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right">${title}</td><td>${unit}</td>`;
+    // 인라인 스타일로 화면상에 5가지 색상 표현
+    const renderRatioRow = (title, unit, numFn, divFn, bg, text) => {
+      const style = `background-color:${bg} !important; color:${text} !important; border-color: #ccc;`;
+      let html = `<tr class="row-ratio"><td colspan="3" style="text-align:right; ${style}">${title}</td><td style="${style}">${unit}</td>`;
       let totalNum = 0, totalDiv = 0;
       floors.forEach(f => {
         const nVal = numFn(f); const dVal = divFn(f);
         totalNum += nVal; totalDiv += dVal;
-        html += `<td>${dVal > 0 ? (nVal/dVal).toFixed(4) : '-'}</td>`;
+        html += `<td style="${style}">${dVal > 0 ? (nVal/dVal).toFixed(4) : '-'}</td>`;
       });
-      html += `<td class="col-total">${totalDiv > 0 ? (totalNum/totalDiv).toFixed(4) : '-'}</td></tr>`;
+      html += `<td class="col-total" style="${style}">${totalDiv > 0 ? (totalNum/totalDiv).toFixed(4) : '-'}</td></tr>`;
       return html;
     };
 
     if(cat === '철근') {
       const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='철근').reduce((s,n)=>s+grouped[n].floors[f],0);
-      bodyHtml += renderRatioRow("지표 (톤당 루베)", "Ton/m³", numFn, (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0));
-      bodyHtml += renderRatioRow("지표 (톤당 면적)", "Ton/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
-      bodyHtml += renderRatioRow("지표 (톤당 평수)", "Ton/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+      bodyHtml += renderRatioRow("레미콘/철근", "Ton/m³", numFn, (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0), '#C00000', '#FFFFFF');
+      bodyHtml += renderRatioRow("면적/철근", "Ton/m²", numFn, (f) => state.areas[dong]?.[f] || 0, '#FFC000', '#000000');
+      bodyHtml += renderRatioRow("평수/철근", "Ton/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025, '#FFFF00', '#000000');
     }
     if(cat === '거푸집') {
       const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
-      bodyHtml += renderRatioRow("지표 (거푸집/면적)", "m²/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
-      bodyHtml += renderRatioRow("지표 (거푸집/평수)", "m²/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+      bodyHtml += renderRatioRow("거푸집/면적", "m²/m²", numFn, (f) => state.areas[dong]?.[f] || 0, '#00B050', '#FFFFFF');
+      bodyHtml += renderRatioRow("거푸집/평수", "m²/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025, '#92D050', '#000000');
     }
   });
   $("table-body").innerHTML = bodyHtml;
 }
 
-/* ★ 엑셀 내보내기 (argb 오타 수정 완료) ★ */
+/* ★ 엑셀 내보내기 (지표 5가지 고유 색상 및 양식 100% 반영) ★ */
 $("btn-excel").onclick = async () => {
   if (!state.ready) return alert("먼저 분석을 완료해주세요.");
   if (typeof ExcelJS === 'undefined') return alert("ExcelJS 라이브러리를 불러오지 못했습니다.");
@@ -279,7 +282,7 @@ $("btn-excel").onclick = async () => {
   ws.columns = cols;
 
   const r1 = ws.addRow(["QS 분석용 프로젝트 통합 템플릿"]); r1.height = 25;
-  ws.mergeCells(1, 1, 2, maxCol); // 1~2행 병합
+  ws.mergeCells(1, 1, 2, maxCol); 
   const titleCell = ws.getCell(1, 1);
   titleCell.font = { size: 16, bold: true, name: '맑은 고딕' };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -304,7 +307,6 @@ $("btn-excel").onclick = async () => {
   for(let r=3; r<=4; r++) {
     for(let c=1; c<=maxCol; c++) {
       const cell = ws.getCell(r, c);
-      // [수정] argb 사용, (R:31 G:78 B:120 -> 1F4E78)
       cell.font = { bold: true, size: 10, name: '맑은 고딕', color: { argb: 'FFFFFFFF' } };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }; 
@@ -351,7 +353,6 @@ $("btn-excel").onclick = async () => {
         for(let c=1; c<=maxCol; c++) {
           const cell = row.getCell(c);
           cell.border = dataBorder; cell.font = { name: '맑은 고딕', size: 10 };
-          // [수정] argb 사용
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowFill } };
           if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
@@ -368,14 +369,14 @@ $("btn-excel").onclick = async () => {
       for(let c=1; c<=maxCol; c++) {
         const cell = sumRow.getCell(c);
         cell.font = { name: '맑은 고딕', size: 10, bold: true };
-        // [수정] argb 사용
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; 
         cell.border = dataBorder;
         if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
         else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.000'; }
       }
 
-      const renderExcelRatio = (title, unit, numFn, divFn) => {
+      // ★ 지표 행 색상 동적 처리 함수 ★
+      const renderExcelRatio = (title, unit, numFn, divFn, bgColor, fontColor) => {
         const ratioRowData = [dong, "지표", title, unit];
         let totalNum = 0, totalDiv = 0;
         
@@ -393,9 +394,8 @@ $("btn-excel").onclick = async () => {
         
         for(let c=1; c<=maxCol; c++) {
           const cell = ratioRow.getCell(c);
-          // [수정] argb 사용, (R:150 G:54 B:52 -> 963634)
-          cell.font = { name: '맑은 고딕', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF963634' } };
+          cell.font = { name: '맑은 고딕', size: 10, bold: true, color: { argb: fontColor } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
           cell.border = dataBorder;
           if (c <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0.0000'; }
@@ -404,15 +404,20 @@ $("btn-excel").onclick = async () => {
 
       if (cat === '철근') {
         const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='철근').reduce((s,n)=>s+grouped[n].floors[f],0);
-        renderExcelRatio("레미콘/철근", "Ton/m³", numFn, (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0));
-        renderExcelRatio("면적/철근", "Ton/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
-        renderExcelRatio("평수/철근", "Ton/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+        // 빨간색 바탕, 흰 글씨
+        renderExcelRatio("레미콘/철근", "Ton/m³", numFn, (f) => Object.keys(grouped).filter(n=>grouped[n].category==='콘크리트').reduce((s,n)=>s+grouped[n].floors[f],0), 'FFC00000', 'FFFFFFFF');
+        // 주황색 바탕, 검은 글씨
+        renderExcelRatio("면적/철근", "Ton/m²", numFn, (f) => state.areas[dong]?.[f] || 0, 'FFFFC000', 'FF000000');
+        // 노란색 바탕, 검은 글씨
+        renderExcelRatio("평수/철근", "Ton/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025, 'FFFFFF00', 'FF000000');
       }
       
       if (cat === '거푸집') {
         const numFn = (f) => Object.keys(grouped).filter(n=>grouped[n].category==='거푸집').reduce((s,n)=>s+grouped[n].floors[f],0);
-        renderExcelRatio("거푸집/면적", "m²/m²", numFn, (f) => state.areas[dong]?.[f] || 0);
-        renderExcelRatio("거푸집/평수", "m²/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025);
+        // 진초록 바탕, 흰 글씨
+        renderExcelRatio("거푸집/면적", "m²/m²", numFn, (f) => state.areas[dong]?.[f] || 0, 'FF00B050', 'FFFFFFFF');
+        // 연초록 바탕, 검은 글씨
+        renderExcelRatio("거푸집/평수", "m²/Py", numFn, (f) => (state.areas[dong]?.[f] || 0) * 0.3025, 'FF92D050', 'FF000000');
       }
     });
 
