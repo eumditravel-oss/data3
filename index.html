@@ -1,169 +1,172 @@
-:root {
-  --bg: #f5f7fb; --panel: #ffffff; --line: #d9e1ef; --text: #10233f;
-  --muted: #6a7890; --primary: #1f5eff; --primary-weak: #eaf1ff;
-  --orange: #e67e22; --success: #10b981; --shadow: 0 10px 24px rgba(16,35,63,.06); --radius: 18px;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: "Pretendard", sans-serif; padding: 24px; line-height: 1.5; }
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QC 프로젝트 층별집계자료 분석기</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar__title">
+        <h1>QS 프로젝트 통합 데이터 관리</h1>
+        <p>전체 동별 수량 집계 및 톤당 루베/면적/평수 3대 지표 분석</p>
+      </div>
+      <div class="topbar__actions">
+        <button id="btn-reset" class="btn btn-ghost" onclick="location.reload()">초기화</button>
+      </div>
+    </header>
 
-.app-shell { max-width: 1600px; margin: 0 auto; }
-.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.topbar h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+    <main class="page">
+      <section class="tabs">
+        <button class="tab is-active" data-tab="upload">1. 데이터 업로드</button>
+        <button class="tab" data-tab="mapping">2. 아이템 분류 설정</button>
+        <button class="tab" data-tab="area" style="color:var(--orange); border-color:var(--orange);">2-1. 면적 입력</button>
+        <button class="tab" data-tab="view">3. 통합 수량표 확인</button>
+      </section>
 
-.tabs { display: flex; gap: 10px; margin-bottom: 24px; }
-.tab { padding: 14px 28px; border-radius: 99px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-weight: 700; transition: 0.2s; color: var(--muted); }
-.tab.is-active { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: 0 6px 15px rgba(31,94,255,0.3); }
+      <section id="tab-upload" class="tab-panel is-active">
+        <div class="panel">
+          <div class="upload-box">
+            <div class="upload-box__icon">📂</div>
+            <h3>분석 데이터 업로드</h3>
+            <p>프로젝트의 모든 층별 총집계표 엑셀 파일을 선택하세요.</p>
+            <label class="filebox">
+              <input type="file" id="file-main" multiple onchange="updateFiles()"/>
+              <span class="filebox__btn">파일 선택</span>
+            </label>
+            <div id="file-list" class="file-list"></div>
+          </div>
+          <button id="btn-parse" class="btn btn-primary" style="width:100%; margin-top:24px; height:56px; font-size: 16px;">데이터 정밀 분석 시작</button>
+          <div id="upload-status" class="status-box"></div>
+        </div>
+      </section>
 
-.panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 30px; margin-bottom: 20px; }
-.tab-panel { display: none; }
-.tab-panel.is-active { display: block; }
+      <section id="tab-mapping" class="tab-panel">
+        <div class="panel">
+          <div class="toolbar">
+            <div class="toolbar__text">
+              <h3>항목 분류 설정</h3>
+              <p>철근(TON), 콘크리트(M3), 거푸집(M2) 분류가 정확한지 검토하세요.</p>
+            </div>
+            <button id="btn-apply" class="btn btn-primary" style="margin-left:auto;">설정 적용 및 면적 입력으로 이동</button>
+          </div>
+          <div class="mapping-container">
+            <div class="list-header">
+              <div class="col-num">번호</div>
+              <div class="col-orig">원본 아이템 명칭</div>
+              <div class="col-edit">표준화 명칭 (수정 가능)</div>
+              <div class="col-cat">중분류</div>
+            </div>
+            <div id="mapping-list" class="mapping-list"></div>
+          </div>
+        </div>
+      </section>
 
-.upload-box { border: 2px dashed var(--line); padding: 60px 20px; text-align: center; border-radius: var(--radius); background: #fbfcff; }
-.upload-box__icon { font-size: 48px; margin-bottom: 15px; }
-.filebox input { display: none; }
-.filebox__btn { padding: 12px 32px; background: #fff; border: 2px solid var(--primary); color: var(--primary); border-radius: 10px; cursor: pointer; font-weight: 800; display: inline-block; }
-.file-chip { display: inline-block; padding: 6px 14px; background: var(--primary-weak); color: var(--primary); border-radius: 20px; font-size: 12px; margin: 5px; font-weight: 700; border: 1px solid var(--line); }
+      <section id="tab-area" class="tab-panel">
+        <div class="panel">
+          <div class="toolbar">
+            <div class="toolbar__text">
+              <h3 style="color:var(--orange);">층별 면적(m²) 입력</h3>
+              <p>각 동/층의 면적을 입력하세요. <br/><strong style="color:var(--primary);">* 엑셀 양식으로 내보내어 정리한 뒤 다시 불러오면 자동으로 값이 채워집니다.</strong></p>
+            </div>
+            <div style="display: flex; gap: 10px; margin-left: auto; align-items: center;">
+              <button id="btn-download-area" class="btn btn-ghost" style="color: #445571; border-color: #d9e1ef;">📥 면적 양식 내보내기</button>
+              <label class="btn btn-ghost" style="cursor: pointer; color: var(--primary); border-color: var(--primary); margin: 0;">
+                📤 면적 양식 불러오기
+                <input type="file" id="file-upload-area" accept=".xlsx, .xls" style="display: none;" />
+              </label>
+              <button id="btn-calc-area" class="btn btn-primary" style="background:var(--orange); margin-left: 10px;">입력 완료 및 수량표 확인</button>
+            </div>
+          </div>
+          <div class="excel-view-container">
+            <table class="excel-table">
+              <thead id="area-head"></thead>
+              <tbody id="area-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
-.mapping-container { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.list-header { display: flex; align-items: center; background: #f4f7fd; padding: 15px; font-weight: 800; color: #445571; border-bottom: 2px solid var(--line); }
-.mapping-list { max-height: 500px; overflow-y: auto; }
+      <section id="tab-view" class="tab-panel">
+        <div id="dong-summary" class="summary-container"></div>
+        <div class="panel">
+          <div class="analysis-toolbar">
+            <div class="analysis-row">
+              <div class="filter-group">
+                <label>조회 동 선택:</label>
+                <select id="filter-dong" class="input"></select>
+              </div>
+              <div class="filter-group">
+                <label>보기 방식:</label>
+                <select id="view-mode" class="input">
+                  <option value="single-horizontal">선택 동별 비교표 · 층 가로형</option>
+                  <option value="all-horizontal">전체 동 비교표 · 층 가로형</option>
+                  <option value="vertical">전체 동 비교표 · 층 세로형</option>
+                  <option value="metric-summary">전체 동 지표 요약표</option>
+                </select>
+              </div>
+              <button id="btn-excel" class="btn btn-success">템플릿 엑셀 다운로드</button>
+            </div>
 
-/* ★ 2번 탭 아이템 분류 행 배경색 (수정됨) ★ */
-.item-row { display: flex; align-items: center; padding: 12px 15px; border-bottom: 1px solid var(--line); gap: 15px; transition: background-color 0.2s ease; }
-.item-row.cat-콘크리트 { background-color: #eef4ff; }
-.item-row.cat-철근 { background-color: #f0fcf4; }
-.item-row.cat-거푸집 { background-color: #fff9ec; }
-.item-row.cat-etc { background-color: #ffffff; }
+            <div class="analysis-row analysis-row--compact">
+              <div class="filter-group filter-group--wide">
+                <label>분류 필터:</label>
+                <div class="check-list">
+                  <label><input type="checkbox" class="category-filter" value="콘크리트" checked /> 콘크리트만 보기</label>
+                  <label><input type="checkbox" class="category-filter" value="철근" checked /> 철근만 보기</label>
+                  <label><input type="checkbox" class="category-filter" value="거푸집" checked /> 거푸집만 보기</label>
+                  <label><input type="checkbox" class="category-filter" value="잡/기타" /> 잡/기타</label>
+                </div>
+              </div>
+            </div>
 
-.item-row.cat-콘크리트:hover { background-color: #dbe8ff; }
-.item-row.cat-철근:hover { background-color: #dcf5e4; }
-.item-row.cat-거푸집:hover { background-color: #fff0cc; }
-.item-row.cat-etc:hover { background-color: #f9fbff; }
-
-.col-num { width: 60px; text-align: center; font-weight: bold; color: var(--muted); }
-.col-orig { flex: 1; font-weight: 700; color: var(--text); }
-.col-edit { width: 250px; }
-.col-cat { width: 180px; }
-
-.excel-view-container { overflow: auto; margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; max-height: 600px; }
-.excel-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; min-width: 1000px; }
-.excel-table thead { position: sticky; top: 0; z-index: 10; box-shadow: 0 1px 0 var(--line); }
-.excel-table th, .excel-table td { border: 0.5px solid var(--line); padding: 12px 10px; text-align: center; white-space: nowrap; }
-.excel-table th { background: #f4f7fd; font-weight: 800; color: #445571; background-clip: padding-box; }
-.excel-table tr:hover td { background: #f9fbff; }
-
-/* ★ 3번 탭 수량표 행 배경색 ★ */
-.row-cat-콘크리트 td { background-color: #eef4ff !important; }
-.row-cat-철근 td { background-color: #f0fcf4 !important; }
-.row-cat-거푸집 td { background-color: #fff9ec !important; }
-.row-cat-etc td { background-color: #ffffff !important; }
-
-.row-cat-콘크리트:hover td { background-color: #dbe8ff !important; }
-.row-cat-철근:hover td { background-color: #dcf5e4 !important; }
-.row-cat-거푸집:hover td { background-color: #fff0cc !important; }
-.row-cat-etc:hover td { background-color: #f9fbff !important; }
-
-.row-subtotal td { background: #f1f3f5 !important; font-weight: 800; color: #10233f; }
-.row-ratio td { background: #fff4e6 !important; font-weight: 800; color: var(--orange); }
-.col-total { background: #f8f9fa; font-weight: 800; color: var(--primary); }
-
-.area-input { width: 100%; box-sizing: border-box; border: none; background: transparent; text-align: right; font-size: 14px; font-weight: bold; outline: none; padding: 5px; color: var(--primary); }
-.area-input:focus { background: #fffde7; outline: 2px solid var(--orange); border-radius: 4px; }
-.area-input::placeholder { color: #ccc; font-weight: normal; }
-
-.btn { padding: 14px 24px; border-radius: 12px; border: none; font-weight: 800; cursor: pointer; transition: 0.2s; }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-success { background: var(--success); color: #fff; }
-.btn-ghost { background: #fff; border: 1px solid var(--line); }
-.toolbar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-.input { padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; outline: none; width: 100%; }
-.input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(31,94,255,0.1); }
-
-.analysis-toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 18px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #fbfcff;
-}
-.analysis-row {
-  display: flex;
-  align-items: end;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.analysis-row--compact { align-items: center; }
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 180px;
-}
-.filter-group label,
-.toggle-check {
-  font-size: 13px;
-  font-weight: 800;
-  color: #334762;
-}
-.filter-group .input { min-width: 180px; }
-.filter-group--wide { flex: 1; min-width: 420px; }
-.filter-group--number { min-width: 140px; }
-.check-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.check-list label,
-.toggle-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #fff;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.analysis-meta {
-  padding: 10px 12px;
-  background: #f4f7fd;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: #445571;
-  font-size: 13px;
-}
-.excel-view-container--analysis { max-height: 620px; }
-.excel-table thead th:first-child,
-.excel-table tbody td:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 6;
-  box-shadow: 1px 0 0 var(--line);
-}
-.excel-table thead th:first-child { z-index: 12; }
-.cell-muted {
-  color: #b2bdcc !important;
-  background: #f8fafc !important;
-}
-.cell-exception {
-  background: #ffe4e6 !important;
-  color: #be123c !important;
-  font-weight: 900 !important;
-}
-.row-exception td {
-  background: #fff1f2 !important;
-}
-.row-ratio-target td {
-  outline: 1px solid rgba(190,18,60,0.25);
-}
-@media (max-width: 900px) {
-  body { padding: 14px; }
-  .panel { padding: 18px; }
-  .analysis-row { align-items: stretch; }
-  .filter-group, .filter-group--wide, .filter-group--number { min-width: 100%; }
-  .check-list { display: grid; grid-template-columns: 1fr 1fr; }
-}
+            <div class="analysis-row analysis-row--compact">
+              <div class="filter-group">
+                <label>기준 지표:</label>
+                <select id="metric-select" class="input">
+                  <option value="rebar_per_concrete">레미콘/철근</option>
+                  <option value="rebar_per_area">면적/철근</option>
+                  <option value="rebar_per_py">평수/철근</option>
+                  <option value="form_per_area">거푸집/면적</option>
+                  <option value="form_per_py">거푸집/평수</option>
+                </select>
+              </div>
+              <div class="filter-group filter-group--number">
+                <label>미달 기준:</label>
+                <input id="threshold-min" class="input" type="number" step="0.0001" placeholder="예: 0.12" />
+              </div>
+              <div class="filter-group filter-group--number">
+                <label>이상 기준:</label>
+                <input id="threshold-max" class="input" type="number" step="0.0001" placeholder="예: 0.18" />
+              </div>
+              <label class="toggle-check">
+                <input type="checkbox" id="only-exception" />
+                기준치 이상/미달 해당 층만 보기
+              </label>
+            </div>
+            <div id="analysis-meta" class="analysis-meta"></div>
+          </div>
+          <div class="excel-view-container excel-view-container--analysis">
+            <table id="main-excel-table" class="excel-table">
+              <thead id="table-head"></thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    function updateFiles() {
+      const list = document.getElementById('file-list');
+      list.innerHTML = Array.from(document.getElementById('file-main').files).map(f=>`<span class="file-chip">${f.name}</span>`).join('');
+    }
+  </script>
+</body>
+</html>
