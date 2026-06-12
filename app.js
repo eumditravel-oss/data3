@@ -2,9 +2,9 @@
 
 const CATEGORIES = ["콘크리트", "거푸집", "철근", "잡/기타"];
 const ANALYSIS_METRICS = {
-  "rebar_per_concrete": { label: "레미콘/철근", unit: "Ton/m³", numerator: "철근", denominator: "콘크리트", digits: 4 },
-  "rebar_per_area": { label: "면적/철근", unit: "Ton/m²", numerator: "철근", denominator: "면적", digits: 4 },
-  "rebar_per_py": { label: "평수/철근", unit: "Ton/Py", numerator: "철근", denominator: "평수", digits: 4 },
+  "rebar_per_concrete": { label: "철근/레미콘", unit: "Ton/m³", numerator: "철근", denominator: "콘크리트", digits: 4 },
+  "rebar_per_area": { label: "철근/면적", unit: "Ton/m²", numerator: "철근", denominator: "면적", digits: 4 },
+  "rebar_per_py": { label: "철근/평수", unit: "Ton/Py", numerator: "철근", denominator: "평수", digits: 4 },
   "form_per_area": { label: "거푸집/면적", unit: "m²/m²", numerator: "거푸집", denominator: "면적", digits: 4 },
   "form_per_py": { label: "거푸집/평수", unit: "m²/Py", numerator: "거푸집", denominator: "평수", digits: 4 }
 };
@@ -16,10 +16,56 @@ const state = {
   data: {},
   mappings: [],
   areas: {},
+  groupedCache: new Map(),
   ready: false
 };
 
 const $ = (id) => document.getElementById(id);
+
+const escapeHTML = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
+
+const categoryClass = (cat) => cat === "잡/기타" ? "etc" : cat;
+
+const invalidateGroupedCache = () => state.groupedCache.clear();
+
+const normalizeFloorName = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return `${raw}F`;
+  return raw.toUpperCase();
+};
+
+const setText = (id, value) => {
+  const el = $(id);
+  if (el) el.textContent = value;
+};
+
+function renderStats(message = "") {
+  setText("stat-dongs", getSortedDongs().length);
+  setText("stat-floors", getSortedFloors().length);
+  setText("stat-items", state.rawItems.length);
+  setText("stat-ready", state.ready ? "완료" : state.rawItems.length ? "검토중" : "대기");
+  setText("stat-message", message || (state.rawItems.length ? "분류와 면적을 확인하세요" : "엑셀 파일을 업로드해 시작하세요"));
+}
+
+function setStatus(message, type = "info") {
+  const box = $("upload-status");
+  if (!box) return;
+  box.className = `status-box is-visible ${type === "success" ? "is-success" : type === "error" ? "is-error" : ""}`;
+  box.textContent = message;
+}
+
+function clearStatus() {
+  const box = $("upload-status");
+  if (!box) return;
+  box.className = "status-box";
+  box.textContent = "";
+}
 
 const fmt = (val, digits = 3) => {
   if (val === 0 || !val || isNaN(val)) return "-";
@@ -45,9 +91,9 @@ function floorSorter(a, b) {
 
 function predictCategory(name) {
   const s = String(name).toUpperCase().replace(/\s+/g, "");
-  if (/(H|D|HD|SD)\d+/.test(s) || s.includes("철근")) return "철근";
-  if (s.includes("MPA") || /\d+-\d+-\d+/.test(s) || (/^\d+$/.test(s) && parseInt(s) >= 150)) return "콘크리트";
-  if (["폼", "FORM", "회", "알폼", "갱폼", "합벽"].some(k => s.includes(k)) || /[가-힣]/.test(s)) return "거푸집";
+  if (/(H|D|HD|SHD|SD)\d+/.test(s) || ["철근", "REBAR", "BAR"].some(k => s.includes(k))) return "철근";
+  if (s.includes("MPA") || ["콘크리트", "레미콘", "CONC"].some(k => s.includes(k)) || /\d+-\d+-\d+/.test(s) || (/^\d+$/.test(s) && parseInt(s, 10) >= 150)) return "콘크리트";
+  if (["거푸집", "폼", "FORM", "알폼", "갱폼", "유로폼", "합벽", "데크"].some(k => s.includes(k))) return "거푸집";
   return "잡/기타";
 }
 
@@ -93,6 +139,8 @@ function isExceptionValue(value, settings) {
 }
 
 function buildGrouped(dong) {
+  if (state.groupedCache.has(dong)) return state.groupedCache.get(dong);
+
   const floors = getSortedFloors();
   const dongData = state.data[dong] || {};
   const grouped = {};
@@ -106,6 +154,7 @@ function buildGrouped(dong) {
     });
   });
 
+  state.groupedCache.set(dong, grouped);
   return grouped;
 }
 
@@ -162,29 +211,49 @@ function updateAnalysisMeta() {
   });
 
   const metric = ANALYSIS_METRICS[settings.metric];
-  const categoryText = getActiveCategories().join(" / ");
-  $("analysis-meta").innerHTML = `검토범위: <b>${dongs.length}</b>개 동 · <b>${floors.length}</b>개 층 · 표시분류: <b>${categoryText}</b> · 기준지표: <b>${metric.label}</b> · 기준 초과/미달: <b>${exceptionCount}</b>개 층 / 유효값 <b>${validCount}</b>개`;
+  const categoryText = escapeHTML(getActiveCategories().join(" / "));
+  $("analysis-meta").innerHTML = `검토범위: <b>${dongs.length}</b>개 동 · <b>${floors.length}</b>개 층 · 표시분류: <b>${categoryText}</b> · 기준지표: <b>${escapeHTML(metric.label)}</b> · 기준 초과/미달: <b>${exceptionCount}</b>개 층 / 유효값 <b>${validCount}</b>개`;
 }
 
 $("btn-parse").onclick = async () => {
   const files = Array.from($("file-main").files);
   if (files.length === 0) return alert("파일을 먼저 선택해주세요.");
 
+  setStatus(`${files.length}개 파일을 읽는 중입니다...`);
   state.rawItems = [];
   state.dongs = [];
   state.floors = [];
   state.data = {};
   state.areas = {};
+  state.ready = false;
+  invalidateGroupedCache();
 
-  for (const file of files) {
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array" });
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
-    parseRows(rows);
+  try {
+    for (const file of files) {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!firstSheet) continue;
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
+      parseRows(rows);
+    }
+  } catch (error) {
+    console.error(error);
+    setStatus("엑셀 파일을 읽는 중 오류가 발생했습니다. 파일 형식과 시트 구성을 확인하세요.", "error");
+    renderStats("업로드 오류");
+    return;
+  }
+
+  if (state.rawItems.length === 0 || state.dongs.length === 0 || state.floors.length === 0) {
+    setStatus("분석 가능한 동/층/항목 데이터를 찾지 못했습니다. 층별 총집계표 양식을 확인하세요.", "error");
+    renderStats("데이터 없음");
+    return;
   }
 
   buildMapping();
   renderMapping();
+  renderStats("자동 분류 결과를 검토하세요");
+  setStatus(`${state.dongs.length}개 동, ${state.floors.length}개 층, ${state.rawItems.length}개 항목을 찾았습니다.`, "success");
   switchTab("mapping");
 };
 
@@ -199,9 +268,9 @@ function parseRows(rows) {
     if (!row || row.length === 0) continue;
 
     const txt = row.join("|");
-    const m = txt.match(/동\s*명\s*:\s*\[([^\]]+)\]/);
+    const m = txt.match(/동\s*명\s*:?\s*(?:\[([^\]]+)\]|([^|]+))/);
     if (m) {
-      const raw = m[1].trim();
+      const raw = String(m[1] || m[2] || "").trim();
       if (raw) {
         curDong = raw;
         if (!state.dongs.includes(curDong)) state.dongs.push(curDong);
@@ -219,7 +288,7 @@ function parseRows(rows) {
     }
 
     if (fRaw !== "") {
-      lastF = /^\d+$/.test(fRaw) ? `${fRaw}F` : fRaw;
+      lastF = normalizeFloorName(fRaw);
       if (!state.floors.includes(lastF)) state.floors.push(lastF);
     }
 
@@ -251,24 +320,37 @@ function buildMapping() {
 
 function renderMapping() {
   $("mapping-list").innerHTML = state.mappings.map(m => {
-    const catClass = m.category === "잡/기타" ? "etc" : m.category;
+    const catClass = categoryClass(m.category);
     return `
       <div class="item-row cat-${catClass}">
         <div class="col-num">${m.id + 1}</div>
-        <div class="col-orig">${m.original}</div>
-        <div class="col-edit"><input class="input" value="${m.canonical}" oninput="updateMapping(${m.id}, 'canonical', this.value)" /></div>
-        <div class="col-cat"><select class="input" onchange="updateMapping(${m.id}, 'category', this.value)">${CATEGORIES.map(c => `<option value="${c}" ${m.category === c ? "selected" : ""}>${c}</option>`).join("")}</select></div>
+        <div class="col-orig">${escapeHTML(m.original)}</div>
+        <div class="col-edit"><input class="input mapping-canonical" data-id="${m.id}" value="${escapeHTML(m.canonical)}" /></div>
+        <div class="col-cat"><select class="input mapping-category" data-id="${m.id}">${CATEGORIES.map(c => `<option value="${escapeHTML(c)}" ${m.category === c ? "selected" : ""}>${escapeHTML(c)}</option>`).join("")}</select></div>
       </div>`;
   }).join("");
+  bindMappingInputs();
 }
 
-window.updateMapping = (id, f, v) => {
+function bindMappingInputs() {
+  document.querySelectorAll(".mapping-canonical").forEach(input => {
+    input.oninput = () => updateMapping(Number(input.dataset.id), "canonical", input.value);
+  });
+  document.querySelectorAll(".mapping-category").forEach(select => {
+    select.onchange = () => updateMapping(Number(select.dataset.id), "category", select.value);
+  });
+}
+
+function updateMapping(id, f, v) {
+  if (!state.mappings[id]) return;
   state.mappings[id][f] = v;
+  invalidateGroupedCache();
   if (f === "category") renderMapping();
-};
+}
 
 $("btn-apply").onclick = () => {
   renderAreaUI();
+  renderStats("층별 면적을 입력하세요");
   switchTab("area");
 };
 
@@ -276,26 +358,36 @@ function renderAreaUI() {
   const dongs = getSortedDongs();
   const floors = getSortedFloors();
 
-  $("area-head").innerHTML = `<tr><th>층 명칭</th>${dongs.map(d => `<th>${d}</th>`).join("")}</tr>`;
+  $("area-head").innerHTML = `<tr><th>층 명칭</th>${dongs.map(d => `<th>${escapeHTML(d)}</th>`).join("")}</tr>`;
 
   let body = "";
   floors.forEach((f, rIdx) => {
-    body += `<tr><td style="font-weight:bold; background:#f4f7fd;">${f}</td>`;
+    body += `<tr><td class="floor-label">${escapeHTML(f)}</td>`;
     dongs.forEach((d, cIdx) => {
       const val = state.areas[d]?.[f] || "";
-      body += `<td><input type="number" class="area-input" data-r="${rIdx}" data-c="${cIdx}" value="${val}" oninput="updateArea('${d}', '${f}', this.value)" onkeydown="handleAreaNav(event, ${rIdx}, ${cIdx}, ${floors.length}, ${dongs.length})" placeholder="-" /></td>`;
+      body += `<td><input type="number" class="area-input" data-r="${rIdx}" data-c="${cIdx}" data-dong="${escapeHTML(d)}" data-floor="${escapeHTML(f)}" value="${escapeHTML(val)}" placeholder="-" /></td>`;
     });
     body += "</tr>";
   });
   $("area-body").innerHTML = body;
+  bindAreaInputs();
 }
 
-window.updateArea = (dong, floor, val) => {
-  if (!state.areas[dong]) state.areas[dong] = {};
-  state.areas[dong][floor] = parseFloat(val) || 0;
-};
+function bindAreaInputs() {
+  const dongs = getSortedDongs();
+  const floors = getSortedFloors();
+  document.querySelectorAll(".area-input").forEach(input => {
+    input.oninput = () => updateArea(input.dataset.dong, input.dataset.floor, input.value);
+    input.onkeydown = (event) => handleAreaNav(event, Number(input.dataset.r), Number(input.dataset.c), floors.length, dongs.length);
+  });
+}
 
-window.handleAreaNav = (e, r, c, maxR, maxC) => {
+function updateArea(dong, floor, val) {
+  if (!state.areas[dong]) state.areas[dong] = {};
+  state.areas[dong][floor] = toNumber(val);
+}
+
+function handleAreaNav(e, r, c, maxR, maxC) {
   let nr = r;
   let nc = c;
   if (e.key === "ArrowUp") nr = Math.max(0, r - 1);
@@ -306,7 +398,7 @@ window.handleAreaNav = (e, r, c, maxR, maxC) => {
 
   const input = document.querySelector(`.area-input[data-r="${nr}"][data-c="${nc}"]`);
   if (input) { input.focus(); input.select(); }
-};
+}
 
 $("btn-download-area").onclick = () => {
   const dongs = getSortedDongs();
@@ -336,11 +428,13 @@ $("file-upload-area").onchange = async (e) => {
 
   const headers = data[0];
   for (let i = 1; i < data.length; i++) {
-    const floor = String(data[i][0]).trim();
+    const floor = normalizeFloorName(data[i][0]);
     if (!floor) continue;
     for (let c = 1; c < headers.length; c++) {
       const dong = String(headers[c]).trim();
-      const val = parseFloat(data[i][c]);
+      const rawVal = String(data[i][c] ?? "").replace(/,/g, "").trim();
+      if (!rawVal) continue;
+      const val = parseFloat(rawVal);
       if (!isNaN(val) && state.dongs.includes(dong) && state.floors.includes(floor)) {
         if (!state.areas[dong]) state.areas[dong] = {};
         state.areas[dong][floor] = val;
@@ -349,16 +443,28 @@ $("file-upload-area").onchange = async (e) => {
   }
 
   renderAreaUI();
+  renderStats("면적 데이터를 불러왔습니다");
   alert("면적 데이터가 성공적으로 불러와졌습니다!");
   e.target.value = "";
 };
 
 $("btn-calc-area").onclick = () => {
   state.ready = true;
-  $("filter-dong").innerHTML = getSortedDongs().map(d => `<option value="${d}">${d}</option>`).join("");
+  $("filter-dong").innerHTML = getSortedDongs().map(d => `<option value="${escapeHTML(d)}">${escapeHTML(d)}</option>`).join("");
   renderView();
+  renderStats("통합 수량표를 확인하세요");
   switchTab("view");
 };
+
+function updateFiles() {
+  const list = $("file-list");
+  const input = $("file-main");
+  if (!list || !input) return;
+  const files = Array.from(input.files);
+  list.innerHTML = files.map(file => `<span class="file-chip" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</span>`).join("");
+  renderStats(files.length ? `${files.length}개 파일 선택됨` : "");
+  clearStatus();
+}
 
 function bindAnalysisControls() {
   const ids = ["filter-dong", "view-mode", "metric-select", "threshold-min", "threshold-max", "only-exception"];
@@ -370,7 +476,10 @@ function bindAnalysisControls() {
   document.querySelectorAll(".category-filter").forEach(el => el.onchange = renderView);
 }
 
-document.addEventListener("DOMContentLoaded", bindAnalysisControls);
+$("file-main").onchange = updateFiles;
+$("btn-reset").onclick = () => location.reload();
+bindAnalysisControls();
+renderStats();
 
 function renderView() {
   if (!state.ready) return;
@@ -389,12 +498,36 @@ function renderView() {
   else if (mode === "metric-summary") renderMetricSummaryView(getSortedDongs(), floors, settings);
   else renderHorizontalView(dongs, floors, activeCategories, exceptionSet, settings);
 
+  renderDongSummary(getSortedDongs(), floors, settings);
   updateAnalysisMeta();
+}
+
+function renderDongSummary(dongs, floors, settings) {
+  const target = $("dong-summary");
+  if (!target) return;
+
+  target.innerHTML = dongs.map(dong => {
+    const concrete = floors.reduce((sum, floor) => sum + getCategoryFloorSum(dong, "콘크리트", floor), 0);
+    const rebar = floors.reduce((sum, floor) => sum + getCategoryFloorSum(dong, "철근", floor), 0);
+    const form = floors.reduce((sum, floor) => sum + getCategoryFloorSum(dong, "거푸집", floor), 0);
+    const exceptionCount = floors.reduce((count, floor) => count + (isExceptionValue(getMetricValue(dong, floor, settings.metric), settings) ? 1 : 0), 0);
+    return `
+      <article class="summary-card">
+        <strong>${escapeHTML(dong)}</strong>
+        <div class="summary-card__grid">
+          <span>레미콘<b>${fmt(concrete, 1)}</b></span>
+          <span>철근<b>${fmt(rebar, 1)}</b></span>
+          <span>거푸집<b>${fmt(form, 1)}</b></span>
+        </div>
+        <small>기준 초과/미달 ${exceptionCount}개 층</small>
+      </article>
+    `;
+  }).join("");
 }
 
 function renderHorizontalView(dongs, floors, activeCategories, exceptionSet, settings) {
   let headHtml = `<tr><th rowspan="2">동</th><th rowspan="2">아이템</th><th rowspan="2">구분</th><th rowspan="2">단위</th><th colspan="${floors.length}">현재 프로젝트 수량</th><th rowspan="2">합계</th></tr><tr>`;
-  floors.forEach(f => headHtml += `<th>${f}</th>`);
+  floors.forEach(f => headHtml += `<th>${escapeHTML(f)}</th>`);
   headHtml += "</tr>";
   $("table-head").innerHTML = headHtml;
 
@@ -410,19 +543,19 @@ function renderHorizontalView(dongs, floors, activeCategories, exceptionSet, set
       if (settings.onlyException && visibleFloors.length === 0) return;
 
       let catSum = 0;
-      const catClass = cat === "잡/기타" ? "etc" : cat;
+      const catClass = categoryClass(cat);
 
       items.forEach(name => {
         const item = grouped[name];
         const total = floors.reduce((s, f) => s + (settings.onlyException && !exceptionSet.has(`${dong}||${f}`) ? 0 : item.floors[f] || 0), 0);
         catSum += total;
-        bodyHtml += `<tr class="row-cat-${catClass}"><td>${dong}</td><td>${categoryLabel(cat)}</td><td>${name}</td><td>${categoryUnit(cat)}</td>${floors.map(f => {
+        bodyHtml += `<tr class="row-cat-${catClass}"><td>${escapeHTML(dong)}</td><td>${escapeHTML(categoryLabel(cat))}</td><td>${escapeHTML(name)}</td><td>${escapeHTML(categoryUnit(cat))}</td>${floors.map(f => {
           const hidden = settings.onlyException && !exceptionSet.has(`${dong}||${f}`);
           return `<td class="${hidden ? "cell-muted" : ""}">${hidden ? "-" : fmt(item.floors[f], 3)}</td>`;
         }).join("")}<td class="col-total">${fmt(total, 3)}</td></tr>`;
       });
 
-      bodyHtml += `<tr class="row-subtotal"><td>${dong}</td><td colspan="2" style="text-align:right">${categoryLabel(cat)} 합계</td><td>${categoryUnit(cat)}</td>${floors.map(f => {
+      bodyHtml += `<tr class="row-subtotal"><td>${escapeHTML(dong)}</td><td colspan="2" class="text-right">${escapeHTML(categoryLabel(cat))} 합계</td><td>${escapeHTML(categoryUnit(cat))}</td>${floors.map(f => {
         const hidden = settings.onlyException && !exceptionSet.has(`${dong}||${f}`);
         const s = items.reduce((sum, n) => sum + (grouped[n].floors[f] || 0), 0);
         return `<td class="${hidden ? "cell-muted" : ""}">${hidden ? "-" : fmt(s, 3)}</td>`;
@@ -449,7 +582,7 @@ function renderRatioRow(dong, floors, metricKey, exceptionSet, settings) {
   const rowClass = isTargetMetric ? "row-ratio row-ratio-target" : "row-ratio";
   let totalNum = 0;
   let totalDiv = 0;
-  let html = `<tr class="${rowClass}"><td>${dong}</td><td>지표</td><td>${metric.label}</td><td>${metric.unit}</td>`;
+  let html = `<tr class="${rowClass}"><td>${escapeHTML(dong)}</td><td>지표</td><td>${escapeHTML(metric.label)}</td><td>${escapeHTML(metric.unit)}</td>`;
 
   floors.forEach(f => {
     const hidden = settings.onlyException && !exceptionSet.has(`${dong}||${f}`);
@@ -471,7 +604,7 @@ function renderRatioRow(dong, floors, metricKey, exceptionSet, settings) {
 }
 
 function renderVerticalView(dongs, floors, activeCategories, exceptionSet, settings) {
-  $("table-head").innerHTML = `<tr><th>동</th><th>층</th><th>아이템</th><th>구분</th><th>단위</th><th>수량</th><th>레미콘/철근</th><th>면적/철근</th><th>평수/철근</th><th>거푸집/면적</th><th>거푸집/평수</th></tr>`;
+  $("table-head").innerHTML = `<tr><th>동</th><th>층</th><th>아이템</th><th>구분</th><th>단위</th><th>수량</th><th>철근/레미콘</th><th>철근/면적</th><th>철근/평수</th><th>거푸집/면적</th><th>거푸집/평수</th></tr>`;
   let bodyHtml = "";
 
   dongs.forEach(dong => {
@@ -484,8 +617,8 @@ function renderVerticalView(dongs, floors, activeCategories, exceptionSet, setti
         items.forEach(name => {
           const value = grouped[name].floors[floor] || 0;
           if (!value) return;
-          const catClass = cat === "잡/기타" ? "etc" : cat;
-          bodyHtml += `<tr class="row-cat-${catClass}"><td>${dong}</td><td>${floor}</td><td>${categoryLabel(cat)}</td><td>${name}</td><td>${categoryUnit(cat)}</td><td>${fmt(value, 3)}</td>${Object.keys(ANALYSIS_METRICS).map(key => {
+          const catClass = categoryClass(cat);
+          bodyHtml += `<tr class="row-cat-${catClass}"><td>${escapeHTML(dong)}</td><td>${escapeHTML(floor)}</td><td>${escapeHTML(categoryLabel(cat))}</td><td>${escapeHTML(name)}</td><td>${escapeHTML(categoryUnit(cat))}</td><td>${fmt(value, 3)}</td>${Object.keys(ANALYSIS_METRICS).map(key => {
             const metricValue = getMetricValue(dong, floor, key);
             const exception = key === settings.metric && isExceptionValue(metricValue, settings);
             return `<td class="${exception ? "cell-exception" : ""}">${fmt(metricValue, ANALYSIS_METRICS[key].digits)}</td>`;
@@ -499,7 +632,7 @@ function renderVerticalView(dongs, floors, activeCategories, exceptionSet, setti
 }
 
 function renderMetricSummaryView(dongs, floors, settings) {
-  $("table-head").innerHTML = `<tr><th>동</th><th>층</th><th>레미콘 합계(M3)</th><th>철근 합계(TON)</th><th>거푸집 합계(M2)</th><th>면적(m²)</th><th>평수(Py)</th><th>레미콘/철근</th><th>면적/철근</th><th>평수/철근</th><th>거푸집/면적</th><th>거푸집/평수</th><th>판정</th></tr>`;
+  $("table-head").innerHTML = `<tr><th>동</th><th>층</th><th>레미콘 합계(M3)</th><th>철근 합계(TON)</th><th>거푸집 합계(M2)</th><th>면적(m²)</th><th>평수(Py)</th><th>철근/레미콘</th><th>철근/면적</th><th>철근/평수</th><th>거푸집/면적</th><th>거푸집/평수</th><th>판정</th></tr>`;
   let bodyHtml = "";
 
   dongs.forEach(dong => {
@@ -514,7 +647,7 @@ function renderMetricSummaryView(dongs, floors, settings) {
       if (settings.onlyException && !exception) return;
       if (!concrete && !rebar && !form) return;
 
-      bodyHtml += `<tr class="${exception ? "row-exception" : ""}"><td>${dong}</td><td>${floor}</td><td>${fmt(concrete, 3)}</td><td>${fmt(rebar, 3)}</td><td>${fmt(form, 3)}</td><td>${fmt(area, 3)}</td><td>${fmt(py, 3)}</td>${Object.keys(ANALYSIS_METRICS).map(key => {
+      bodyHtml += `<tr class="${exception ? "row-exception" : ""}"><td>${escapeHTML(dong)}</td><td>${escapeHTML(floor)}</td><td>${fmt(concrete, 3)}</td><td>${fmt(rebar, 3)}</td><td>${fmt(form, 3)}</td><td>${fmt(area, 3)}</td><td>${fmt(py, 3)}</td>${Object.keys(ANALYSIS_METRICS).map(key => {
         const value = getMetricValue(dong, floor, key);
         const isTarget = key === settings.metric;
         return `<td class="${isTarget && exception ? "cell-exception" : ""}">${fmt(value, ANALYSIS_METRICS[key].digits)}</td>`;

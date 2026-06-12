@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QC 프로젝트 층별집계자료 분석기</title>
+  <title>CONCOST DATA3 · QS 통합 데이터 분석</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
@@ -13,36 +13,67 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar__title">
+        <div class="brand-mark">
+          <span class="brand-mark__symbol">C</span>
+          <span class="brand-mark__text">CONCOST DATA3</span>
+        </div>
         <h1>QS 프로젝트 통합 데이터 관리</h1>
-        <p>전체 동별 수량 집계 및 톤당 루베/면적/평수 3대 지표 분석</p>
+        <p>층별 집계표를 수량·면적·평당 지표로 정리하는 공사비 데이터 워크벤치</p>
       </div>
       <div class="topbar__actions">
-        <button id="btn-reset" class="btn btn-ghost" onclick="location.reload()">초기화</button>
+        <div class="topbar__badge">
+          <span>Mode</span>
+          <strong>QS Analysis</strong>
+        </div>
+        <button id="btn-reset" class="btn btn-ghost">초기화</button>
       </div>
     </header>
 
     <main class="page">
+      <section class="overview-grid" aria-label="분석 상태 요약">
+        <article class="metric-card">
+          <span class="metric-card__label">동 수</span>
+          <strong id="stat-dongs">0</strong>
+          <small>분석 대상</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-card__label">층 수</span>
+          <strong id="stat-floors">0</strong>
+          <small>정렬 기준 적용</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-card__label">항목</span>
+          <strong id="stat-items">0</strong>
+          <small>분류/표준화</small>
+        </article>
+        <article class="metric-card metric-card--status">
+          <span class="metric-card__label">진행 상태</span>
+          <strong id="stat-ready">대기</strong>
+          <small id="stat-message">엑셀 파일을 업로드해 시작하세요</small>
+        </article>
+      </section>
+
       <section class="tabs">
-        <button class="tab is-active" data-tab="upload">1. 데이터 업로드</button>
-        <button class="tab" data-tab="mapping">2. 아이템 분류 설정</button>
-        <button class="tab" data-tab="area" style="color:var(--orange); border-color:var(--orange);">2-1. 면적 입력</button>
-        <button class="tab" data-tab="view">3. 통합 수량표 확인</button>
+        <button class="tab is-active" data-tab="upload"><span>01</span> 데이터 업로드</button>
+        <button class="tab" data-tab="mapping"><span>02</span> 아이템 분류</button>
+        <button class="tab tab--accent" data-tab="area"><span>03</span> 면적 입력</button>
+        <button class="tab" data-tab="view"><span>04</span> 통합 수량표</button>
       </section>
 
       <section id="tab-upload" class="tab-panel is-active">
-        <div class="panel">
+        <div class="panel panel--upload">
           <div class="upload-box">
-            <div class="upload-box__icon">📂</div>
+            <div class="upload-box__icon">XLS</div>
             <h3>분석 데이터 업로드</h3>
             <p>프로젝트의 모든 층별 총집계표 엑셀 파일을 선택하세요.</p>
             <label class="filebox">
-              <input type="file" id="file-main" multiple onchange="updateFiles()"/>
+              <input type="file" id="file-main" multiple />
               <span class="filebox__btn">파일 선택</span>
             </label>
             <div id="file-list" class="file-list"></div>
           </div>
-          <button id="btn-parse" class="btn btn-primary" style="width:100%; margin-top:24px; height:56px; font-size: 16px;">데이터 정밀 분석 시작</button>
-          <div id="upload-status" class="status-box"></div>
+          <button id="btn-parse" class="btn btn-primary btn-xl">데이터 정밀 분석 시작</button>
+          <div id="upload-status" class="status-box" aria-live="polite"></div>
         </div>
       </section>
 
@@ -53,7 +84,7 @@
               <h3>항목 분류 설정</h3>
               <p>철근(TON), 콘크리트(M3), 거푸집(M2) 분류가 정확한지 검토하세요.</p>
             </div>
-            <button id="btn-apply" class="btn btn-primary" style="margin-left:auto;">설정 적용 및 면적 입력으로 이동</button>
+            <button id="btn-apply" class="btn btn-primary toolbar__button">설정 적용 및 면적 입력으로 이동</button>
           </div>
           <div class="mapping-container">
             <div class="list-header">
@@ -71,16 +102,16 @@
         <div class="panel">
           <div class="toolbar">
             <div class="toolbar__text">
-              <h3 style="color:var(--orange);">층별 면적(m²) 입력</h3>
-              <p>각 동/층의 면적을 입력하세요. <br/><strong style="color:var(--primary);">* 엑셀 양식으로 내보내어 정리한 뒤 다시 불러오면 자동으로 값이 채워집니다.</strong></p>
+              <h3 class="text-accent">층별 면적(m²) 입력</h3>
+              <p>각 동/층의 면적을 입력하세요. <br/><strong class="note-strong">* 엑셀 양식으로 내보내어 정리한 뒤 다시 불러오면 자동으로 값이 채워집니다.</strong></p>
             </div>
-            <div style="display: flex; gap: 10px; margin-left: auto; align-items: center;">
-              <button id="btn-download-area" class="btn btn-ghost" style="color: #445571; border-color: #d9e1ef;">📥 면적 양식 내보내기</button>
-              <label class="btn btn-ghost" style="cursor: pointer; color: var(--primary); border-color: var(--primary); margin: 0;">
-                📤 면적 양식 불러오기
-                <input type="file" id="file-upload-area" accept=".xlsx, .xls" style="display: none;" />
+            <div class="toolbar__actions">
+              <button id="btn-download-area" class="btn btn-ghost">면적 양식 내보내기</button>
+              <label class="btn btn-ghost file-action">
+                면적 양식 불러오기
+                <input type="file" id="file-upload-area" accept=".xlsx, .xls" />
               </label>
-              <button id="btn-calc-area" class="btn btn-primary" style="background:var(--orange); margin-left: 10px;">입력 완료 및 수량표 확인</button>
+              <button id="btn-calc-area" class="btn btn-accent">입력 완료 및 수량표 확인</button>
             </div>
           </div>
           <div class="excel-view-container">
@@ -98,11 +129,11 @@
           <div class="analysis-toolbar">
             <div class="analysis-row">
               <div class="filter-group">
-                <label>조회 동 선택:</label>
+                <label>조회 동 선택</label>
                 <select id="filter-dong" class="input"></select>
               </div>
               <div class="filter-group">
-                <label>보기 방식:</label>
+                <label>보기 방식</label>
                 <select id="view-mode" class="input">
                   <option value="single-horizontal">선택 동별 비교표 · 층 가로형</option>
                   <option value="all-horizontal">전체 동 비교표 · 층 가로형</option>
@@ -115,7 +146,7 @@
 
             <div class="analysis-row analysis-row--compact">
               <div class="filter-group filter-group--wide">
-                <label>분류 필터:</label>
+                <label>분류 필터</label>
                 <div class="check-list">
                   <label><input type="checkbox" class="category-filter" value="콘크리트" checked /> 콘크리트만 보기</label>
                   <label><input type="checkbox" class="category-filter" value="철근" checked /> 철근만 보기</label>
@@ -127,21 +158,21 @@
 
             <div class="analysis-row analysis-row--compact">
               <div class="filter-group">
-                <label>기준 지표:</label>
+                <label>기준 지표</label>
                 <select id="metric-select" class="input">
-                  <option value="rebar_per_concrete">레미콘/철근</option>
-                  <option value="rebar_per_area">면적/철근</option>
-                  <option value="rebar_per_py">평수/철근</option>
+                  <option value="rebar_per_concrete">철근/레미콘</option>
+                  <option value="rebar_per_area">철근/면적</option>
+                  <option value="rebar_per_py">철근/평수</option>
                   <option value="form_per_area">거푸집/면적</option>
                   <option value="form_per_py">거푸집/평수</option>
                 </select>
               </div>
               <div class="filter-group filter-group--number">
-                <label>미달 기준:</label>
+                <label>미달 기준</label>
                 <input id="threshold-min" class="input" type="number" step="0.0001" placeholder="예: 0.12" />
               </div>
               <div class="filter-group filter-group--number">
-                <label>이상 기준:</label>
+                <label>이상 기준</label>
                 <input id="threshold-max" class="input" type="number" step="0.0001" placeholder="예: 0.18" />
               </div>
               <label class="toggle-check">
@@ -162,11 +193,5 @@
     </main>
   </div>
   <script src="app.js"></script>
-  <script>
-    function updateFiles() {
-      const list = document.getElementById('file-list');
-      list.innerHTML = Array.from(document.getElementById('file-main').files).map(f=>`<span class="file-chip">${f.name}</span>`).join('');
-    }
-  </script>
 </body>
 </html>
